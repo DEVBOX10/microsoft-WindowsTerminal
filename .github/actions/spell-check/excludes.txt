@@ -35,7 +35,7 @@ SUMS$
 \.pbxproj$
 \.pdf$
 \.pem$
-\.png$
+(?:(?i)\.png$)
 \.psd$
 \.runsettings$
 \.sig$
@@ -62,3 +62,4 @@ SUMS$
 ^src/tools/U8U16Test/(?:fr|ru|zh)\.txt$
 ^\.github/actions/spell-check/
 ^\.gitignore$
+^doc/reference/master-sequence-list.csv$

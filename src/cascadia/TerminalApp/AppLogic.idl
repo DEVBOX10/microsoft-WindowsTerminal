@@ -29,6 +29,7 @@ namespace TerminalApp
         Boolean IsElevated();
 
         Int32 SetStartupCommandline(String[] commands);
+        Int32 ExecuteCommandline(String[] commands);
         String ParseCommandlineMessage { get; };
         Boolean ShouldExitEarly { get; };
 
@@ -52,6 +53,9 @@ namespace TerminalApp
         void TitlebarClicked();
         void WindowCloseButtonClicked();
 
+        UInt64 GetLastActiveControlTaskbarState();
+        UInt64 GetLastActiveControlTaskbarProgress();
+
         // See IDialogPresenter and TerminalPage's DialogPresenter for more
         // information.
         Windows.Foundation.IAsyncOperation<Windows.UI.Xaml.Controls.ContentDialogResult> ShowDialog(Windows.UI.Xaml.Controls.ContentDialog dialog);
@@ -63,5 +67,7 @@ namespace TerminalApp
         event Windows.Foundation.TypedEventHandler<Object, Object> FocusModeChanged;
         event Windows.Foundation.TypedEventHandler<Object, Object> FullscreenChanged;
         event Windows.Foundation.TypedEventHandler<Object, Object> AlwaysOnTopChanged;
+        event Windows.Foundation.TypedEventHandler<Object, Object> RaiseVisualBell;
+        event Windows.Foundation.TypedEventHandler<Object, Object> SetTaskbarProgress;
     }
 }

@@ -88,6 +88,13 @@ namespace Microsoft::Terminal::Settings::Model::JsonUtils
         static constexpr auto&& Value(const ::winrt::Windows::Foundation::IReference<T>& o) { return o.Value(); }
     };
 
+    class SerializationError : public std::runtime_error
+    {
+    public:
+        SerializationError() :
+            runtime_error("failed to serialize") {}
+    };
+
     class DeserializationError : public std::runtime_error
     {
     public:
@@ -499,7 +506,7 @@ namespace Microsoft::Terminal::Settings::Model::JsonUtils
             }
 
             DeserializationError e{ json };
-            e.expectedType = TypeDescription();
+            e.expectedType = static_cast<const TBase&>(*this).TypeDescription();
             throw e;
         }
 
@@ -517,7 +524,7 @@ namespace Microsoft::Terminal::Settings::Model::JsonUtils
                     return { pair.first.data() };
                 }
             }
-            FAIL_FAST();
+            throw SerializationError{};
         }
 
         std::string TypeDescription() const
@@ -565,7 +572,7 @@ namespace Microsoft::Terminal::Settings::Model::JsonUtils
                     {
                         // attempt to combine AllClear (explicitly) with anything else
                         DeserializationError e{ element };
-                        e.expectedType = BaseEnumMapper::TypeDescription();
+                        e.expectedType = static_cast<const TBase&>(*this).TypeDescription();
                         throw e;
                     }
                     value |= newFlag;
