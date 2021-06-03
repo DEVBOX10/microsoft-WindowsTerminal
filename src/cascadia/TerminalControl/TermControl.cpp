@@ -1664,7 +1664,10 @@ namespace winrt::Microsoft::Terminal::Control::implementation
     void TermControl::_CursorPositionChanged(const IInspectable& /*sender*/,
                                              const IInspectable& /*args*/)
     {
-        _tsfTryRedrawCanvas->Run();
+        if (_tsfTryRedrawCanvas)
+        {
+            _tsfTryRedrawCanvas->Run();
+        }
     }
 
     hstring TermControl::Title()
@@ -1836,9 +1839,11 @@ namespace winrt::Microsoft::Terminal::Control::implementation
         // will take up.
         // TODO: MSFT:21254947 - use a static function to do this instead of
         // instantiating a DxEngine
+        // GH#10211 - UNDER NO CIRCUMSTANCE should this fail. If it does, the
+        // whole app will crash instantaneously on launch, which is no good.
         auto dxEngine = std::make_unique<::Microsoft::Console::Render::DxEngine>();
-        THROW_IF_FAILED(dxEngine->UpdateDpi(dpi));
-        THROW_IF_FAILED(dxEngine->UpdateFont(desiredFont, actualFont));
+        LOG_IF_FAILED(dxEngine->UpdateDpi(dpi));
+        LOG_IF_FAILED(dxEngine->UpdateFont(desiredFont, actualFont));
 
         const auto scale = dxEngine->GetScaling();
         const auto fontSize = actualFont.GetSize();
@@ -2371,6 +2376,57 @@ namespace winrt::Microsoft::Terminal::Control::implementation
     const size_t TermControl::TaskbarProgress() const noexcept
     {
         return _core->TaskbarProgress();
+    }
+
+    void TermControl::BellLightOn()
+    {
+        // Initialize the animation if it does not exist
+        // We only initialize here instead of in the ctor because depending on the bell style setting,
+        // we may never need this animation
+        if (!_bellLightAnimation)
+        {
+            _bellLightAnimation = Window::Current().Compositor().CreateScalarKeyFrameAnimation();
+            // Add key frames and a duration to our bell light animation
+            _bellLightAnimation.InsertKeyFrame(0.0, 2.0);
+            _bellLightAnimation.InsertKeyFrame(1.0, 1.0);
+            _bellLightAnimation.Duration(winrt::Windows::Foundation::TimeSpan(std::chrono::milliseconds(TerminalWarningBellInterval)));
+        }
+
+        // Similar to the animation, only initialize the timer here
+        if (!_bellLightTimer)
+        {
+            _bellLightTimer = {};
+            _bellLightTimer.Interval(std::chrono::milliseconds(TerminalWarningBellInterval));
+            _bellLightTimer.Tick({ get_weak(), &TermControl::_BellLightOff });
+        }
+
+        Windows::Foundation::Numerics::float2 zeroSize{ 0, 0 };
+        // If the grid has 0 size or if the bell timer is
+        // already active, do nothing
+        if (RootGrid().ActualSize() != zeroSize && !_bellLightTimer.IsEnabled())
+        {
+            // Start the timer, when the timer ticks we switch off the light
+            _bellLightTimer.Start();
+
+            // Switch on the light and animate the intensity to fade out
+            VisualBellLight::SetIsTarget(RootGrid(), true);
+            BellLight().CompositionLight().StartAnimation(L"Intensity", _bellLightAnimation);
+        }
+    }
+
+    void TermControl::_BellLightOff(Windows::Foundation::IInspectable const& /* sender */,
+                                    Windows::Foundation::IInspectable const& /* e */)
+    {
+        if (_bellLightTimer)
+        {
+            // Stop the timer and switch off the light
+            _bellLightTimer.Stop();
+
+            if (!_closing)
+            {
+                VisualBellLight::SetIsTarget(RootGrid(), false);
+            }
+        }
     }
 
     // Method Description:

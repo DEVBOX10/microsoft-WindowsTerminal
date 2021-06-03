@@ -4,6 +4,7 @@
 #pragma once
 
 #include "TermControl.g.h"
+#include "XamlLights.h"
 #include "EventArgs.h"
 #include "../../renderer/base/Renderer.hpp"
 #include "../../renderer/dx/DxRenderer.hpp"
@@ -99,6 +100,8 @@ namespace winrt::Microsoft::Terminal::Control::implementation
                                                                const winrt::hstring& padding,
                                                                const uint32_t dpi);
 
+        void BellLightOn();
+
         bool ReadOnly() const noexcept;
         void ToggleReadOnly();
 
@@ -171,6 +174,9 @@ namespace winrt::Microsoft::Terminal::Control::implementation
         Windows::UI::Xaml::DispatcherTimer _autoScrollTimer;
         std::optional<std::chrono::high_resolution_clock::time_point> _lastAutoScrollUpdateTime;
 
+        winrt::Windows::UI::Composition::ScalarKeyFrameAnimation _bellLightAnimation{ nullptr };
+        Windows::UI::Xaml::DispatcherTimer _bellLightTimer{ nullptr };
+
         std::optional<Windows::UI::Xaml::DispatcherTimer> _cursorTimer;
         std::optional<Windows::UI::Xaml::DispatcherTimer> _blinkTimer;
 
@@ -209,6 +215,7 @@ namespace winrt::Microsoft::Terminal::Control::implementation
 
         void _CursorTimerTick(Windows::Foundation::IInspectable const& sender, Windows::Foundation::IInspectable const& e);
         void _BlinkTimerTick(Windows::Foundation::IInspectable const& sender, Windows::Foundation::IInspectable const& e);
+        void _BellLightOff(Windows::Foundation::IInspectable const& sender, Windows::Foundation::IInspectable const& e);
 
         void _SetEndSelectionPointAtCursor(Windows::Foundation::Point const& cursorPosition);
 
