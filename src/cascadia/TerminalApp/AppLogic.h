@@ -7,7 +7,9 @@
 #include "FindTargetWindowResult.g.h"
 #include "TerminalPage.h"
 #include "Jumplist.h"
-#include "../../cascadia/inc/cppwinrt_utils.h"
+
+#include <inc/cppwinrt_utils.h>
+#include <ThrottledFunc.h>
 
 #ifdef UNIT_TESTING
 // fwdecl unittest classes
@@ -87,8 +89,8 @@ namespace winrt::TerminalApp::implementation
 
         void WindowCloseButtonClicked();
 
-        size_t GetLastActiveControlTaskbarState();
-        size_t GetLastActiveControlTaskbarProgress();
+        uint64_t GetLastActiveControlTaskbarState();
+        uint64_t GetLastActiveControlTaskbarProgress();
 
         winrt::Windows::Foundation::IAsyncOperation<winrt::Windows::UI::Xaml::Controls::ContentDialogResult> ShowDialog(winrt::Windows::UI::Xaml::Controls::ContentDialog dialog);
 
@@ -111,16 +113,14 @@ namespace winrt::TerminalApp::implementation
 
         Microsoft::Terminal::Settings::Model::CascadiaSettings _settings{ nullptr };
 
-        HRESULT _settingsLoadedResult;
-        winrt::hstring _settingsLoadExceptionText{};
-
-        bool _loadedInitialSettings;
-
         wil::unique_folder_change_reader_nothrow _reader;
+        std::shared_ptr<ThrottledFuncTrailing<>> _reloadSettings;
+        til::throttled_func_trailing<> _reloadState;
+        winrt::hstring _settingsLoadExceptionText;
+        HRESULT _settingsLoadedResult = S_OK;
+        bool _loadedInitialSettings = false;
 
         std::shared_mutex _dialogLock;
-
-        std::atomic<bool> _settingsReloadQueued{ false };
 
         ::TerminalApp::AppCommandlineArgs _appArgs;
         ::TerminalApp::AppCommandlineArgs _settingsAppArgs;
