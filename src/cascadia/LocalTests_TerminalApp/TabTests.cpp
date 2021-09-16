@@ -430,7 +430,7 @@ namespace TerminalAppLocalTests
         Log::Comment(L"Duplicate the tab, and don't crash");
         result = RunOnUIThread([&page]() {
             page->_DuplicateFocusedTab();
-            VERIFY_ARE_EQUAL(2u, page->_tabs.Size(), L"We should gracefully do nothing here - the profile no longer exists.");
+            VERIFY_ARE_EQUAL(3u, page->_tabs.Size(), L"We should successfully duplicate a tab hosting a deleted profile.");
         });
         VERIFY_SUCCEEDED(result);
     }
@@ -508,7 +508,7 @@ namespace TerminalAppLocalTests
 
         Log::Comment(NoThrowString().Format(L"Duplicate the first pane"));
         result = RunOnUIThread([&page]() {
-            page->_SplitPane(SplitState::Automatic, SplitType::Duplicate, 0.5f, nullptr);
+            page->_SplitPane(SplitDirection::Automatic, SplitType::Duplicate, 0.5f, nullptr);
 
             VERIFY_ARE_EQUAL(1u, page->_tabs.Size());
             auto tab = page->_GetTerminalTabImpl(page->_tabs.GetAt(0));
@@ -526,13 +526,13 @@ namespace TerminalAppLocalTests
 
         Log::Comment(NoThrowString().Format(L"Duplicate the pane, and don't crash"));
         result = RunOnUIThread([&page]() {
-            page->_SplitPane(SplitState::Automatic, SplitType::Duplicate, 0.5f, nullptr);
+            page->_SplitPane(SplitDirection::Automatic, SplitType::Duplicate, 0.5f, nullptr);
 
             VERIFY_ARE_EQUAL(1u, page->_tabs.Size());
             auto tab = page->_GetTerminalTabImpl(page->_tabs.GetAt(0));
-            VERIFY_ARE_EQUAL(2,
+            VERIFY_ARE_EQUAL(3,
                              tab->GetLeafPaneCount(),
-                             L"We should gracefully do nothing here - the profile no longer exists.");
+                             L"We should successfully duplicate a pane hosting a deleted profile.");
         });
         VERIFY_SUCCEEDED(result);
 
@@ -844,7 +844,7 @@ namespace TerminalAppLocalTests
             // |   1    |   2    |
             // |        |        |
             // -------------------
-            page->_SplitPane(SplitState::Vertical, SplitType::Duplicate, 0.5f, nullptr);
+            page->_SplitPane(SplitDirection::Right, SplitType::Duplicate, 0.5f, nullptr);
             secondId = tab->_activePane->Id().value();
         });
         Sleep(250);
@@ -862,7 +862,7 @@ namespace TerminalAppLocalTests
             // |   3    |        |
             // |        |        |
             // -------------------
-            page->_SplitPane(SplitState::Horizontal, SplitType::Duplicate, 0.5f, nullptr);
+            page->_SplitPane(SplitDirection::Down, SplitType::Duplicate, 0.5f, nullptr);
             auto tab = page->_GetTerminalTabImpl(page->_tabs.GetAt(0));
             // Split again to make the 3rd tab
             thirdId = tab->_activePane->Id().value();
@@ -882,7 +882,7 @@ namespace TerminalAppLocalTests
             // |   3    |   4    |
             // |        |        |
             // -------------------
-            page->_SplitPane(SplitState::Horizontal, SplitType::Duplicate, 0.5f, nullptr);
+            page->_SplitPane(SplitDirection::Down, SplitType::Duplicate, 0.5f, nullptr);
             auto tab = page->_GetTerminalTabImpl(page->_tabs.GetAt(0));
             fourthId = tab->_activePane->Id().value();
         });

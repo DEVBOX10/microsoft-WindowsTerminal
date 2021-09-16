@@ -60,10 +60,6 @@ namespace winrt::Microsoft::Terminal::Settings::Model::implementation
                                                                      const Model::Profile& profile,
                                                                      const Control::IKeyBindings& keybindings);
 
-        static Model::TerminalSettingsCreateResult CreateWithProfileByID(const Model::CascadiaSettings& appSettings,
-                                                                         guid profileGuid,
-                                                                         const Control::IKeyBindings& keybindings);
-
         static Model::TerminalSettingsCreateResult CreateWithNewTerminalArgs(const Model::CascadiaSettings& appSettings,
                                                                              const Model::NewTerminalArgs& newTerminalArgs,
                                                                              const Control::IKeyBindings& keybindings);
@@ -131,6 +127,7 @@ namespace winrt::Microsoft::Terminal::Settings::Model::implementation
         INHERITABLE_SETTING(Model::TerminalSettings, IFontAxesMap, FontAxes);
         INHERITABLE_SETTING(Model::TerminalSettings, IFontFeatureMap, FontFeatures);
 
+        INHERITABLE_SETTING(Model::TerminalSettings, Model::ColorScheme, AppliedColorScheme);
         INHERITABLE_SETTING(Model::TerminalSettings, hstring, BackgroundImage);
         INHERITABLE_SETTING(Model::TerminalSettings, double, BackgroundImageOpacity, 1.0);
 

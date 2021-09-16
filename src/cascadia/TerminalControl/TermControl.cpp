@@ -351,6 +351,10 @@ namespace winrt::Microsoft::Terminal::Control::implementation
     {
         _core.SendInput(wstr);
     }
+    void TermControl::ClearBuffer(Control::ClearBufferType clearType)
+    {
+        _core.ClearBuffer(clearType);
+    }
 
     void TermControl::ToggleShaderEffects()
     {
@@ -681,8 +685,11 @@ namespace winrt::Microsoft::Terminal::Control::implementation
             DispatcherTimer cursorTimer;
             cursorTimer.Interval(std::chrono::milliseconds(blinkTime));
             cursorTimer.Tick({ get_weak(), &TermControl::_CursorTimerTick });
-            cursorTimer.Start();
             _cursorTimer.emplace(std::move(cursorTimer));
+            // As of GH#6586, don't start the cursor timer immediately, and
+            // don't show the cursor initially. We'll show the cursor and start
+            // the timer when the control is first focused. cursorTimer.Start();
+            _core.CursorOn(false);
         }
         else
         {
@@ -710,12 +717,6 @@ namespace winrt::Microsoft::Terminal::Control::implementation
 
         // Now that the renderer is set up, update the appearance for initialization
         _UpdateAppearanceFromUIThread(_settings);
-
-        // Focus the control here. If we do it during control initialization, then
-        //      focus won't actually get passed to us. I believe this is because
-        //      we're not technically a part of the UI tree yet, so focusing us
-        //      becomes a no-op.
-        this->Focus(FocusState::Programmatic);
 
         _initializedTerminal = true;
 
@@ -1223,6 +1224,12 @@ namespace winrt::Microsoft::Terminal::Control::implementation
         _RestorePointerCursorHandlers(*this, nullptr);
 
         const auto point = args.GetCurrentPoint(*this);
+        // GH#10329 - we don't need to handle horizontal scrolls. Only vertical ones.
+        // So filter out the horizontal ones.
+        if (point.Properties().IsHorizontalMouseWheel())
+        {
+            return;
+        }
 
         auto result = _interactivity.MouseWheel(ControlKeyStates{ args.KeyModifiers() },
                                                 point.Properties().MouseWheelDelta(),
@@ -2564,5 +2571,10 @@ namespace winrt::Microsoft::Terminal::Control::implementation
     void TermControl::_coreWarningBell(const IInspectable& /*sender*/, const IInspectable& /*args*/)
     {
         _playWarningBell->Run();
+    }
+
+    hstring TermControl::ReadEntireBuffer() const
+    {
+        return _core.ReadEntireBuffer();
     }
 }
