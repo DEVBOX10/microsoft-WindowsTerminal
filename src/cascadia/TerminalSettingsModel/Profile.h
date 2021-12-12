@@ -48,7 +48,6 @@ Author(s):
 #include "IInheritable.h"
 #include "MTSMSettings.h"
 
-#include "../inc/cppwinrt_utils.h"
 #include "JsonUtils.h"
 #include <DefaultSettings.h>
 #include "AppearanceConfig.h"
@@ -111,10 +110,6 @@ namespace winrt::Microsoft::Terminal::Settings::Model::implementation
         // Nullable/optional settings
         INHERITABLE_NULLABLE_SETTING(Model::Profile, Microsoft::Terminal::Core::Color, TabColor, nullptr);
         INHERITABLE_SETTING(Model::Profile, Model::IAppearanceConfig, UnfocusedAppearance, nullptr);
-
-        // Global settings
-        INHERITABLE_SETTING(Model::Profile, bool, ForceFullRepaintRendering, false);
-        INHERITABLE_SETTING(Model::Profile, bool, SoftwareRendering, false);
 
         // Settings that cannot be put in the macro because of how they are handled in ToJson/LayerJson
         INHERITABLE_SETTING(Model::Profile, hstring, Name, L"Default");

@@ -174,10 +174,9 @@ namespace winrt::TerminalApp::implementation
         else if (const auto& realArgs = args.ActionArgs().try_as<SplitPaneArgs>())
         {
             _SplitPane(realArgs.SplitDirection(),
-                       realArgs.SplitMode(),
                        // This is safe, we're already filtering so the value is (0, 1)
                        ::base::saturated_cast<float>(realArgs.SplitSize()),
-                       realArgs.TerminalArgs());
+                       _MakePane(realArgs.TerminalArgs(), realArgs.SplitMode() == SplitType::Duplicate));
             args.Handled(true);
         }
     }
@@ -452,28 +451,7 @@ namespace winrt::TerminalApp::implementation
             if (const auto scheme = _settings.GlobalSettings().ColorSchemes().TryLookup(realArgs.SchemeName()))
             {
                 const auto res = _ApplyToActiveControls([&](auto& control) {
-                    // Start by getting the current settings of the control
-                    auto controlSettings = control.Settings().as<TerminalSettings>();
-                    auto parentSettings = controlSettings;
-                    // Those are the _runtime_ settings however. What we
-                    // need to do is:
-                    //
-                    //   1. Blow away any colors set in the runtime settings.
-                    //   2. Apply the color scheme to the parent settings.
-                    //
-                    // 1 is important to make sure that the effects of
-                    // something like `colortool` are cleared when setting
-                    // the scheme.
-                    if (controlSettings.GetParent() != nullptr)
-                    {
-                        parentSettings = controlSettings.GetParent();
-                    }
-
-                    // ApplyColorScheme(nullptr) will clear the old color scheme.
-                    controlSettings.ApplyColorScheme(nullptr);
-                    parentSettings.ApplyColorScheme(scheme);
-
-                    control.UpdateSettings();
+                    control.ColorScheme(scheme.ToCoreScheme());
                 });
                 args.Handled(res);
             }
