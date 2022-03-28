@@ -239,6 +239,7 @@ CHARSETINFO
 chcp
 checkbox
 checkboxes
+Checkin
 chh
 Childitem
 chk
@@ -318,6 +319,7 @@ concat
 concfg
 conclnt
 conddkrefs
+condev
 condrv
 conechokey
 conemu
@@ -471,6 +473,7 @@ cygwin
 CYHSCROLL
 CYMIN
 CYPADDEDBORDER
+CYRL
 CYSIZE
 CYSIZEFRAME
 CYSMICON
@@ -671,10 +674,10 @@ dwriteglyphrundescriptionclustermap
 dxgi
 dxgidwm
 dxinterop
+dxp
 dxsm
 dxttbmp
 Dyreen
-eachother
 eaf
 EASTEUROPE
 ECH
@@ -825,7 +828,6 @@ FORCEOFFFEEDBACK
 FORCEONFEEDBACK
 FORCEV
 foreach
-forground
 fprintf
 framebuffer
 FRAMECHANGED
@@ -915,6 +917,7 @@ getwriter
 GFEh
 Gfun
 gfx
+GGI
 GHIJK
 GHIJKL
 GHIJKLM
@@ -1092,6 +1095,7 @@ ifndef
 IFont
 ifstream
 IGNOREEND
+IGNORELANGUAGE
 IHigh
 IHosted
 iid
@@ -1151,6 +1155,7 @@ ioctl
 iomanip
 iostream
 iot
+ipa
 ipch
 ipconfig
 IPersist
@@ -1238,12 +1243,14 @@ KLF
 KLMNO
 KLMNOPQRST
 KLMNOPQRSTQQQQQ
+KOK
 KPRIORITY
 KVM
 langid
 LANGUAGELIST
 lasterror
 lastexitcode
+LATN
 LAYOUTRTL
 LBN
 LBound
@@ -1458,6 +1465,7 @@ mscorlib
 msctf
 msctls
 msdata
+MSDL
 msdn
 msft
 MSGCMDLINEF
@@ -1471,6 +1479,7 @@ MSGSELECTMODE
 msiexec
 MSIL
 msix
+mspartners
 msrc
 msvcrt
 MSVCRTD
@@ -1689,7 +1698,6 @@ outfile
 Outof
 OUTOFCONTEXT
 OUTOFMEMORY
-outout
 Outptr
 outstr
 OVERLAPPEDWINDOW
@@ -1792,6 +1800,9 @@ placeholders
 platforming
 playsound
 plist
+PLOC
+PLOCA
+PLOCM
 PLOGICAL
 plugin
 PMv
@@ -1838,7 +1849,6 @@ pragma
 prc
 prealigned
 prebuilt
-precendence
 precomp
 prect
 prefast
@@ -1925,6 +1935,7 @@ qsort
 queryable
 QUESTIONMARK
 quickedit
+QUZ
 QWER
 qzmp
 RAII
@@ -2075,6 +2086,7 @@ rxvt
 safearray
 SAFECAST
 safemath
+sapi
 sba
 SBCS
 SBCSDBCS
@@ -2229,6 +2241,7 @@ srect
 srv
 srvinit
 srvpipe
+ssa
 ssh
 sstream
 stackoverflow
@@ -2437,6 +2450,7 @@ TREX
 triaged
 triaging
 TRIANGLESTRIP
+Tribool
 TRIMZEROHEADINGS
 truetype
 trx
@@ -2508,6 +2522,7 @@ UNICRT
 uninit
 uninitialize
 uninstall
+unintense
 Uniscribe
 unittest
 unittesting
@@ -2553,6 +2568,7 @@ USESHOWWINDOW
 USESIZE
 USESTDHANDLES
 ushort
+usp
 USRDLL
 utf
 utils
@@ -2563,6 +2579,7 @@ uuidv
 UVWX
 UVWXY
 UWA
+UWAs
 uwp
 uxtheme
 vals
@@ -2658,6 +2675,7 @@ wddmcon
 wddmconrenderer
 WDDMCONSOLECONTEXT
 wdm
+wdx
 webclient
 webpage
 website
@@ -2692,6 +2710,7 @@ wincontypes
 WINCORE
 windbg
 WINDEF
+windev
 WINDIR
 windll
 WINDOWALPHA

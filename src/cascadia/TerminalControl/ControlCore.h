@@ -88,7 +88,7 @@ namespace winrt::Microsoft::Terminal::Control::implementation
         void UpdatePatternLocations();
         void SetHoveredCell(Core::Point terminalPosition);
         void ClearHoveredCell();
-        winrt::hstring GetHyperlink(const til::point position) const;
+        winrt::hstring GetHyperlink(const Core::Point position) const;
         winrt::hstring HoveredUriText() const;
         Windows::Foundation::IReference<Core::Point> HoveredCell() const;
 
@@ -138,7 +138,7 @@ namespace winrt::Microsoft::Terminal::Control::implementation
         void CursorOn(const bool isCursorOn);
 
         bool IsVtMouseModeEnabled() const;
-        til::point CursorPosition() const;
+        Core::Point CursorPosition() const;
 
         bool HasSelection() const;
         bool CopyOnSelect() const;
@@ -166,6 +166,8 @@ namespace winrt::Microsoft::Terminal::Control::implementation
 
         static bool IsVintageOpacityAvailable() noexcept;
 
+        void AdjustOpacity(const double opacity, const bool relative);
+
         RUNTIME_SETTING(double, Opacity, _settings->Opacity());
         RUNTIME_SETTING(bool, UseAcrylic, _settings->UseAcrylic());
 
@@ -189,6 +191,7 @@ namespace winrt::Microsoft::Terminal::Control::implementation
         TYPED_EVENT(RaiseNotice,               IInspectable, Control::NoticeEventArgs);
         TYPED_EVENT(TransparencyChanged,       IInspectable, Control::TransparencyChangedEventArgs);
         TYPED_EVENT(ReceivedOutput,            IInspectable, IInspectable);
+        TYPED_EVENT(FoundMatch,                IInspectable, Control::FoundResultsArgs);
         // clang-format on
 
     private:
@@ -239,11 +242,9 @@ namespace winrt::Microsoft::Terminal::Control::implementation
 
         winrt::fire_and_forget _asyncCloseConnection();
 
-        void _setFontSize(int fontSize);
+        bool _setFontSizeUnderLock(int fontSize);
         void _updateFont(const bool initialUpdate = false);
         void _refreshSizeUnderLock();
-        void _doResizeUnderLock(const double newWidth,
-                                const double newHeight);
 
         void _sendInputToConnection(std::wstring_view wstr);
 
@@ -269,6 +270,7 @@ namespace winrt::Microsoft::Terminal::Control::implementation
         void _updateAntiAliasingMode();
         void _connectionOutputHandler(const hstring& hstr);
         void _updateHoveredCell(const std::optional<til::point> terminalPosition);
+        void _setOpacity(const double opacity);
 
         bool _isBackgroundTransparent();
 

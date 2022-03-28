@@ -27,7 +27,7 @@ namespace Microsoft::Console::Render
         // This is where the data is stored
         const TextBuffer& buffer;
 
-        // This is where the top left of the stored buffer should be overlayed on the screen
+        // This is where the top left of the stored buffer should be overlaid on the screen
         // (relative to the current visible viewport)
         const COORD origin;
 
@@ -52,10 +52,7 @@ namespace Microsoft::Console::Render
         virtual ULONG GetCursorHeight() const noexcept = 0;
         virtual CursorType GetCursorStyle() const noexcept = 0;
         virtual ULONG GetCursorPixelWidth() const noexcept = 0;
-        virtual COLORREF GetCursorColor() const noexcept = 0;
         virtual bool IsCursorDoubleWidth() const = 0;
-
-        virtual bool IsScreenReversed() const noexcept = 0;
 
         virtual const std::vector<RenderOverlay> GetOverlays() const noexcept = 0;
 

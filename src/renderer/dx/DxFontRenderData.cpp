@@ -2,22 +2,21 @@
 // Licensed under the MIT license.
 
 #include "precomp.h"
-
 #include "DxFontRenderData.h"
-
-#include "unicode.hpp"
 
 #include <VersionHelpers.h>
 
+#include "../base/FontCache.h"
+
 static constexpr float POINTS_PER_INCH = 72.0f;
-static constexpr std::wstring_view FALLBACK_FONT_FACES[] = { L"Consolas", L"Lucida Console", L"Courier New" };
 static constexpr std::wstring_view FALLBACK_LOCALE = L"en-us";
 static constexpr size_t TAG_LENGTH = 4;
 
 using namespace Microsoft::Console::Render;
 
-DxFontRenderData::DxFontRenderData(::Microsoft::WRL::ComPtr<IDWriteFactory1> dwriteFactory) noexcept :
+DxFontRenderData::DxFontRenderData(::Microsoft::WRL::ComPtr<IDWriteFactory1> dwriteFactory) :
     _dwriteFactory(dwriteFactory),
+    _nearbyCollection{ FontCache::GetCached() },
     _fontSize{},
     _glyphCell{},
     _lineMetrics{},
@@ -114,7 +113,7 @@ DxFontRenderData::DxFontRenderData(::Microsoft::WRL::ComPtr<IDWriteFactory1> dwr
     if (!_boxDrawingEffect)
     {
         // Calculate and cache the box effect for the base font. Scale is 1.0f because the base font is exactly the scale we want already.
-        THROW_IF_FAILED(s_CalculateBoxEffect(DefaultTextFormat().Get(), _glyphCell.width(), DefaultFontFace().Get(), 1.0f, &_boxDrawingEffect));
+        THROW_IF_FAILED(s_CalculateBoxEffect(DefaultTextFormat().Get(), _glyphCell.width, DefaultFontFace().Get(), 1.0f, &_boxDrawingEffect));
     }
 
     return _boxDrawingEffect;
@@ -165,7 +164,7 @@ DxFontRenderData::DxFontRenderData(::Microsoft::WRL::ComPtr<IDWriteFactory1> dwr
         fontInfo.SetStretch(stretch);
 
         std::wstring fontLocaleName = UserLocaleName();
-        Microsoft::WRL::ComPtr<IDWriteFontFace1> fontFace = fontInfo.ResolveFontFaceWithFallback(_dwriteFactory.Get(), fontLocaleName);
+        Microsoft::WRL::ComPtr<IDWriteFontFace1> fontFace = fontInfo.ResolveFontFaceWithFallback(_nearbyCollection.get(), fontLocaleName);
 
         _fontFaceMap.emplace(_ToMapKey(weight, style, stretch), fontFace);
         return fontFace;
@@ -467,7 +466,7 @@ bool DxFontRenderData::DidUserSetAxes() const noexcept
 // Routine Description:
 // - Function called to inform us whether to use the user set weight
 //   in the font axes
-// - Called by CustomTextLayout, when the text attribute is bold we should
+// - Called by CustomTextLayout, when the text attribute is intense we should
 //   ignore the user set weight, otherwise setting the bold font axis
 //   breaks the bold font attribute
 // Arguments:
@@ -547,7 +546,7 @@ void DxFontRenderData::_SetAxes(const std::unordered_map<std::wstring_view, floa
     {
         // Store the weight aside: we will be creating a span of all the axes in the vector except the weight,
         // and then we will add the weight to the vector
-        // We are doing this so that when the text attribute is bold, we can apply all the axes except the weight
+        // We are doing this so that when the text attribute is intense, we can apply all the axes except the weight
         std::optional<DWRITE_FONT_AXIS_VALUE> weightAxis;
 
         // Since we are calling an 'emplace_back' after creating the span,
@@ -711,7 +710,7 @@ void DxFontRenderData::_BuildFontRenderData(const FontInfoDesired& desired, Font
     // This is the first attempt to resolve font face after `UpdateFont`.
     // Note that the following line may cause property changes _inside_ `_defaultFontInfo` because the desired font may not exist.
     // See the implementation of `ResolveFontFaceWithFallback` for details.
-    const Microsoft::WRL::ComPtr<IDWriteFontFace1> face = _defaultFontInfo.ResolveFontFaceWithFallback(_dwriteFactory.Get(), fontLocaleName);
+    const Microsoft::WRL::ComPtr<IDWriteFontFace1> face = _defaultFontInfo.ResolveFontFaceWithFallback(_nearbyCollection.get(), fontLocaleName);
 
     DWRITE_FONT_METRICS1 fontMetrics;
     face->GetMetrics(&fontMetrics);
@@ -738,7 +737,7 @@ void DxFontRenderData::_BuildFontRenderData(const FontInfoDesired& desired, Font
     // - 12 ppi font * (96 dpi / 96 dpi) * (96 dpi / 72 points per inch) = 16 pixels tall font for 100% display (96 dpi is 100%)
     // - 12 ppi font * (144 dpi / 96 dpi) * (96 dpi / 72 points per inch) = 24 pixels tall font for 150% display (144 dpi is 150%)
     // - 12 ppi font * (192 dpi / 96 dpi) * (96 dpi / 72 points per inch) = 32 pixels tall font for 200% display (192 dpi is 200%)
-    float heightDesired = static_cast<float>(desired.GetEngineSize().Y) * static_cast<float>(USER_DEFAULT_SCREEN_DPI) / POINTS_PER_INCH;
+    float heightDesired = desired.GetEngineSize().Y * USER_DEFAULT_SCREEN_DPI / POINTS_PER_INCH;
 
     // The advance is the number of pixels left-to-right (X dimension) for the given font.
     // We're finding a proportional factor here with the design units in "ems", not an actual pixel measurement.
@@ -891,14 +890,14 @@ void DxFontRenderData::_BuildFontRenderData(const FontInfoDesired& desired, Font
 
     _lineMetrics = lineMetrics;
 
-    _glyphCell = actual.GetSize();
+    _glyphCell = til::size{ actual.GetSize() };
 }
 
 Microsoft::WRL::ComPtr<IDWriteTextFormat> DxFontRenderData::_BuildTextFormat(const DxFontInfo& fontInfo, const std::wstring_view localeName)
 {
     Microsoft::WRL::ComPtr<IDWriteTextFormat> format;
     THROW_IF_FAILED(_dwriteFactory->CreateTextFormat(fontInfo.GetFamilyName().data(),
-                                                     fontInfo.GetNearbyCollection(),
+                                                     _nearbyCollection.get(),
                                                      fontInfo.GetWeight(),
                                                      fontInfo.GetStyle(),
                                                      fontInfo.GetStretch(),

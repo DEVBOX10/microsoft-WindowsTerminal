@@ -29,7 +29,7 @@ GdiEngine::GdiEngine() :
     _fInvalidRectUsed(false),
     _lastFg(INVALID_COLOR),
     _lastBg(INVALID_COLOR),
-    _lastFontType(FontType::Default),
+    _lastFontType(FontType::Undefined),
     _currentLineTransform(IDENTITY_XFORM),
     _currentLineRendition(LineRendition::SingleWidth),
     _fPaintStarted(false),
@@ -141,15 +141,6 @@ GdiEngine::~GdiEngine()
     // Store new window handle and memory context
     _hwndTargetWindow = hwnd;
     _hdcMemoryContext = hdcNewMemoryContext;
-
-    // If we have a font, apply it to the context.
-    if (nullptr != _hfont)
-    {
-        LOG_HR_IF_NULL(E_FAIL, SelectFont(_hdcMemoryContext, _hfont));
-    }
-
-    // Record the fact that the selected font is the default.
-    _lastFontType = FontType::Default;
 
     if (nullptr != hdcRealWindow)
     {
@@ -268,6 +259,7 @@ GdiEngine::~GdiEngine()
 // - This method will set the GDI brushes in the drawing context (and update the hung-window background color)
 // Arguments:
 // - textAttributes - Text attributes to use for the brush color
+// - renderSettings - The color table and modes required for rendering
 // - pData - The interface to console data structures required for rendering
 // - usingSoftFont - Whether we're rendering characters from a soft font
 // - isSettingDefaultBrushes - Lets us know that the default brushes are being set so we can update the DC background
@@ -275,7 +267,8 @@ GdiEngine::~GdiEngine()
 // Return Value:
 // - S_OK if set successfully or relevant GDI error via HRESULT.
 [[nodiscard]] HRESULT GdiEngine::UpdateDrawingBrushes(const TextAttribute& textAttributes,
-                                                      const gsl::not_null<IRenderData*> pData,
+                                                      const RenderSettings& renderSettings,
+                                                      const gsl::not_null<IRenderData*> /*pData*/,
                                                       const bool usingSoftFont,
                                                       const bool isSettingDefaultBrushes) noexcept
 {
@@ -284,7 +277,7 @@ GdiEngine::~GdiEngine()
     RETURN_HR_IF_NULL(HRESULT_FROM_WIN32(ERROR_INVALID_STATE), _hdcMemoryContext);
 
     // Set the colors for painting text
-    const auto [colorForeground, colorBackground] = pData->GetAttributeColors(textAttributes);
+    const auto [colorForeground, colorBackground] = renderSettings.GetAttributeColors(textAttributes);
 
     if (colorForeground != _lastFg)
     {
@@ -325,6 +318,7 @@ GdiEngine::~GdiEngine()
             break;
         }
         _lastFontType = fontType;
+        _fontHasWesternScript = FontHasWesternScript(_hdcMemoryContext);
     }
 
     return S_OK;
@@ -345,9 +339,6 @@ GdiEngine::~GdiEngine()
 
     // Select into DC
     RETURN_HR_IF_NULL(E_FAIL, SelectFont(_hdcMemoryContext, hFont.get()));
-
-    // Record the fact that the selected font is the default.
-    _lastFontType = FontType::Default;
 
     // Save off the font metrics for various other calculations
     RETURN_HR_IF(E_FAIL, !(GetTextMetricsW(_hdcMemoryContext, &_tmFontMetrics)));
@@ -435,7 +426,7 @@ GdiEngine::~GdiEngine()
     _fontCodepage = Font.GetCodePage();
 
     // Inform the soft font of the change in size.
-    _softFont.SetTargetSize(_GetFontSize());
+    _softFont.SetTargetSize(til::size{ _GetFontSize() });
 
     LOG_IF_FAILED(InvalidateAll());
 
@@ -454,7 +445,9 @@ GdiEngine::~GdiEngine()
                                                 const SIZE cellSize,
                                                 const size_t centeringHint) noexcept
 {
-    // If the soft font is currently selected, replace it with the default font.
+    // If we previously called SelectFont(_hdcMemoryContext, _softFont), it will
+    // still hold a reference to the _softFont object we're planning to overwrite.
+    // --> First revert back to the standard _hfont, lest we have dangling pointers.
     if (_lastFontType == FontType::Soft)
     {
         RETURN_HR_IF_NULL(E_FAIL, SelectFont(_hdcMemoryContext, _hfont));
@@ -462,7 +455,7 @@ GdiEngine::~GdiEngine()
     }
 
     // Create a new font resource with the updated pattern, or delete if empty.
-    _softFont = { bitPattern, cellSize, _GetFontSize(), centeringHint };
+    _softFont = FontResource{ bitPattern, til::size{ cellSize }, til::size{ _GetFontSize() }, centeringHint };
 
     return S_OK;
 }

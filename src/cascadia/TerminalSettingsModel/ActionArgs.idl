@@ -130,7 +130,7 @@ namespace Microsoft.Terminal.Settings.Model
         String ColorScheme;
         // This needs to be an optional so that the default value (null) does
         // not modify whatever the profile's value is (either true or false)
-        Windows.Foundation.IReference<Boolean> Elevate { get; };
+        Windows.Foundation.IReference<Boolean> Elevate;
 
         Boolean Equals(NewTerminalArgs other);
         String GenerateName();
@@ -358,5 +358,12 @@ namespace Microsoft.Terminal.Settings.Model
     {
         MultipleActionsArgs();
         Windows.Foundation.Collections.IVector<ActionAndArgs> Actions;
+    };
+
+    [default_interface] runtimeclass AdjustOpacityArgs : IActionArgs
+    {
+        AdjustOpacityArgs();
+        Int32 Opacity { get; };
+        Boolean Relative { get; };
     };
 }

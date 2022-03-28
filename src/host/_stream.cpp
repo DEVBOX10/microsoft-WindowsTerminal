@@ -196,7 +196,7 @@ using Microsoft::Console::VirtualTerminal::StateMachine;
             // back where it started, but everything else moved.
             // In this case, delta was 1. So the amount that moved is the entire viewport height minus the delta.
             Viewport invalid = Viewport::FromDimensions(viewport.Origin(), { viewport.Width(), viewport.Height() - delta });
-            screenInfo.GetRenderTarget().TriggerRedraw(invalid);
+            screenInfo.GetTextBuffer().TriggerRedraw(invalid);
         }
 
         // reset where our local viewport is, and recalculate the cursor and
@@ -765,6 +765,15 @@ using Microsoft::Console::VirtualTerminal::StateMachine;
                     Status = AdjustCursorPosition(screenInfo, CursorPosition, dwFlags & WC_KEEP_CURSOR_VISIBLE, psScrollY);
                 }
             }
+            // Notify accessibility to read the backspaced character.
+            // See GH:12735, MSFT:31748387
+            if (screenInfo.HasAccessibilityEventing())
+            {
+                if (IConsoleWindow* pConsoleWindow = ServiceLocator::LocateConsoleWindow())
+                {
+                    LOG_IF_FAILED(pConsoleWindow->SignalUia(UIA_Text_TextChangedEventId));
+                }
+            }
             break;
         }
         case UNICODE_TAB:
@@ -1221,7 +1230,7 @@ using Microsoft::Console::VirtualTerminal::StateMachine;
             wstr.resize((dbcsLength + mbPtrLength) / sizeof(wchar_t));
         }
 
-        // Hold the specific version of the waiter locally so we can tinker with it if we must to store additional context.
+        // Hold the specific version of the waiter locally so we can tinker with it if we have to store additional context.
         std::unique_ptr<WriteData> writeDataWaiter{};
 
         // Make the W version of the call

@@ -122,7 +122,8 @@ namespace winrt::Microsoft::Terminal::Control::implementation
             auto* const localPointerToThread = renderThread.get();
 
             // Now create the renderer and initialize the render thread.
-            _renderer = std::make_unique<::Microsoft::Console::Render::Renderer>(_terminal.get(), nullptr, 0, std::move(renderThread));
+            const auto& renderSettings = _terminal->GetRenderSettings();
+            _renderer = std::make_unique<::Microsoft::Console::Render::Renderer>(renderSettings, _terminal.get(), nullptr, 0, std::move(renderThread));
 
             _renderer->SetRendererEnteredErrorStateCallback([weakThis = get_weak()]() {
                 if (auto strongThis{ weakThis.get() })
@@ -281,7 +282,6 @@ namespace winrt::Microsoft::Terminal::Control::implementation
             _renderEngine->SetPixelShaderPath(_settings->PixelShaderPath());
             _renderEngine->SetForceFullRepaintRendering(_settings->ForceFullRepaintRendering());
             _renderEngine->SetSoftwareRendering(_settings->SoftwareRendering());
-            _renderEngine->SetIntenseIsBold(_settings->IntenseIsBold());
 
             _updateAntiAliasingMode();
 
@@ -423,7 +423,7 @@ namespace winrt::Microsoft::Terminal::Control::implementation
                                      const short wheelDelta,
                                      const TerminalInput::MouseButtonState state)
     {
-        return _terminal->SendMouseEvent(viewportPos, uiButton, states, wheelDelta, state);
+        return _terminal->SendMouseEvent(viewportPos.to_win32_coord(), uiButton, states, wheelDelta, state);
     }
 
     void ControlCore::UserScrollViewport(const int viewTop)
@@ -445,11 +445,20 @@ namespace winrt::Microsoft::Terminal::Control::implementation
             return;
         }
 
-        auto newOpacity = std::clamp(Opacity() + adjustment,
-                                     0.0,
-                                     1.0);
+        _setOpacity(Opacity() + adjustment);
+    }
 
-        auto lock = _terminal->LockForWriting();
+    void ControlCore::_setOpacity(const double opacity)
+    {
+        const auto newOpacity = std::clamp(opacity,
+                                           0.0,
+                                           1.0);
+
+        if (newOpacity == Opacity())
+        {
+            return;
+        }
+
         // Update our runtime opacity value
         Opacity(newOpacity);
 
@@ -469,6 +478,7 @@ namespace winrt::Microsoft::Terminal::Control::implementation
         if (_renderEngine)
         {
             _renderEngine->EnableTransparentBackground(_isBackgroundTransparent());
+            _renderer->NotifyPaintFrame();
         }
 
         auto eventArgs = winrt::make_self<TransparencyChangedEventArgs>(newOpacity);
@@ -537,12 +547,12 @@ namespace winrt::Microsoft::Terminal::Control::implementation
         _lastHoveredCell = terminalPosition;
         uint16_t newId{ 0u };
         // we can't use auto here because we're pre-declaring newInterval.
-        decltype(_terminal->GetHyperlinkIntervalFromPosition(til::point{})) newInterval{ std::nullopt };
+        decltype(_terminal->GetHyperlinkIntervalFromPosition(COORD{})) newInterval{ std::nullopt };
         if (terminalPosition.has_value())
         {
             auto lock = _terminal->LockForReading(); // Lock for the duration of our reads.
-            newId = _terminal->GetHyperlinkIdAtPosition(*terminalPosition);
-            newInterval = _terminal->GetHyperlinkIntervalFromPosition(*terminalPosition);
+            newId = _terminal->GetHyperlinkIdAtPosition(terminalPosition->to_win32_coord());
+            newInterval = _terminal->GetHyperlinkIntervalFromPosition(terminalPosition->to_win32_coord());
         }
 
         // If the hyperlink ID changed or the interval changed, trigger a redraw all
@@ -568,11 +578,11 @@ namespace winrt::Microsoft::Terminal::Control::implementation
         }
     }
 
-    winrt::hstring ControlCore::GetHyperlink(const til::point pos) const
+    winrt::hstring ControlCore::GetHyperlink(const Core::Point pos) const
     {
         // Lock for the duration of our reads.
         auto lock = _terminal->LockForReading();
-        return winrt::hstring{ _terminal->GetHyperlinkAtPosition(pos) };
+        return winrt::hstring{ _terminal->GetHyperlinkAtPosition(til::point{ pos }.to_win32_coord()) };
     }
 
     winrt::hstring ControlCore::HoveredUriText() const
@@ -580,14 +590,14 @@ namespace winrt::Microsoft::Terminal::Control::implementation
         auto lock = _terminal->LockForReading(); // Lock for the duration of our reads.
         if (_lastHoveredCell.has_value())
         {
-            return winrt::hstring{ _terminal->GetHyperlinkAtPosition(*_lastHoveredCell) };
+            return winrt::hstring{ _terminal->GetHyperlinkAtPosition(_lastHoveredCell->to_win32_coord()) };
         }
         return {};
     }
 
     Windows::Foundation::IReference<Core::Point> ControlCore::HoveredCell() const
     {
-        return _lastHoveredCell.has_value() ? Windows::Foundation::IReference<Core::Point>{ _lastHoveredCell.value() } : nullptr;
+        return _lastHoveredCell.has_value() ? Windows::Foundation::IReference<Core::Point>{ _lastHoveredCell.value().to_core_point() } : nullptr;
     }
 
     // Method Description:
@@ -610,19 +620,7 @@ namespace winrt::Microsoft::Terminal::Control::implementation
             _runtimeUseAcrylic = true;
         }
 
-        // Initialize our font information.
-        const auto fontFace = _settings->FontFace();
-        const short fontHeight = ::base::saturated_cast<short>(_settings->FontSize());
-        const auto fontWeight = _settings->FontWeight();
-        // The font width doesn't terribly matter, we'll only be using the
-        //      height to look it up
-        // The other params here also largely don't matter.
-        //      The family is only used to determine if the font is truetype or
-        //      not, but DX doesn't use that info at all.
-        //      The Codepage is additionally not actually used by the DX engine at all.
-        _actualFont = { fontFace, 0, fontWeight.Weight, { 0, fontHeight }, CP_UTF8, false };
-        _actualFontFaceName = { fontFace };
-        _desiredFont = { _actualFont };
+        const auto sizeChanged = _setFontSizeUnderLock(_settings->FontSize());
 
         // Update the terminal core with its new Core settings
         _terminal->UpdateSettings(*_settings);
@@ -641,11 +639,7 @@ namespace winrt::Microsoft::Terminal::Control::implementation
 
         _updateAntiAliasingMode();
 
-        // Refresh our font with the renderer
-        const auto actualFontOldSize = _actualFont.GetSize();
-        _updateFont();
-        const auto actualFontNewSize = _actualFont.GetSize();
-        if (actualFontNewSize != actualFontOldSize)
+        if (sizeChanged)
         {
             _refreshSizeUnderLock();
         }
@@ -668,7 +662,6 @@ namespace winrt::Microsoft::Terminal::Control::implementation
             _renderEngine->SetSelectionBackground(til::color{ newAppearance->SelectionBackground() });
             _renderEngine->SetRetroTerminalEffect(newAppearance->RetroTerminalEffect());
             _renderEngine->SetPixelShaderPath(newAppearance->PixelShaderPath());
-            _renderEngine->SetIntenseIsBold(_settings->IntenseIsBold());
             _renderer->TriggerRedrawAll();
         }
     }
@@ -759,30 +752,22 @@ namespace winrt::Microsoft::Terminal::Control::implementation
     // - Set the font size of the terminal control.
     // Arguments:
     // - fontSize: The size of the font.
-    void ControlCore::_setFontSize(int fontSize)
+    // Return Value:
+    // - Returns true if you need to call _refreshSizeUnderLock().
+    bool ControlCore::_setFontSizeUnderLock(int fontSize)
     {
-        try
-        {
-            // Make sure we have a non-zero font size
-            const auto newSize = std::max<short>(gsl::narrow_cast<short>(fontSize), 1);
-            const auto fontFace = _settings->FontFace();
-            const auto fontWeight = _settings->FontWeight();
-            _actualFont = { fontFace, 0, fontWeight.Weight, { 0, newSize }, CP_UTF8, false };
-            _actualFontFaceName = { fontFace };
-            _desiredFont = { _actualFont };
+        // Make sure we have a non-zero font size
+        const auto newSize = std::max<short>(gsl::narrow_cast<short>(fontSize), 1);
+        const auto fontFace = _settings->FontFace();
+        const auto fontWeight = _settings->FontWeight();
+        _actualFont = { fontFace, 0, fontWeight.Weight, { 0, newSize }, CP_UTF8, false };
+        _actualFontFaceName = { fontFace };
+        _desiredFont = { _actualFont };
 
-            auto lock = _terminal->LockForWriting();
-
-            // Refresh our font with the renderer
-            _updateFont();
-
-            // Resize the terminal's BUFFER to match the new font size. This does
-            // NOT change the size of the window, because that can lead to more
-            // problems (like what happens when you change the font size while the
-            // window is maximized?)
-            _refreshSizeUnderLock();
-        }
-        CATCH_LOG();
+        const auto before = _actualFont.GetSize();
+        _updateFont();
+        const auto after = _actualFont.GetSize();
+        return before != after;
     }
 
     // Method Description:
@@ -791,7 +776,12 @@ namespace winrt::Microsoft::Terminal::Control::implementation
     // - none
     void ControlCore::ResetFontSize()
     {
-        _setFontSize(_settings->FontSize());
+        const auto lock = _terminal->LockForWriting();
+
+        if (_setFontSizeUnderLock(_settings->FontSize()))
+        {
+            _refreshSizeUnderLock();
+        }
     }
 
     // Method Description:
@@ -800,29 +790,12 @@ namespace winrt::Microsoft::Terminal::Control::implementation
     // - fontSizeDelta: The amount to increase or decrease the font size by.
     void ControlCore::AdjustFontSize(int fontSizeDelta)
     {
-        const auto newSize = _desiredFont.GetEngineSize().Y + fontSizeDelta;
-        _setFontSize(newSize);
-    }
+        const auto lock = _terminal->LockForWriting();
 
-    // Method Description:
-    // - Perform a resize for the current size of the swapchainpanel. If the
-    //   font size changed, we'll need to resize the buffer to fit the existing
-    //   swapchain size. This helper will call _doResizeUnderLock with the
-    //   current size of the swapchain, accounting for scaling due to DPI.
-    // - Note that a DPI change will also trigger a font size change, and will
-    //   call into here.
-    // - The write lock should be held when calling this method, we might be
-    //   changing the buffer size in _doResizeUnderLock.
-    // Arguments:
-    // - <none>
-    // Return Value:
-    // - <none>
-    void ControlCore::_refreshSizeUnderLock()
-    {
-        const auto widthInPixels = _panelWidth * _compositionScale;
-        const auto heightInPixels = _panelHeight * _compositionScale;
-
-        _doResizeUnderLock(widthInPixels, heightInPixels);
+        if (_setFontSizeUnderLock(_desiredFont.GetEngineSize().Y + fontSizeDelta))
+        {
+            _refreshSizeUnderLock();
+        }
     }
 
     // Method Description:
@@ -830,39 +803,33 @@ namespace winrt::Microsoft::Terminal::Control::implementation
     //   be due to the user resizing the window (causing the swapchain to
     //   resize) or due to the DPI changing (causing us to need to resize the
     //   buffer to match)
+    // - Note that a DPI change will also trigger a font size change, and will
+    //   call into here.
+    // - The write lock should be held when calling this method, we might be
+    //   changing the buffer size in _refreshSizeUnderLock.
     // Arguments:
-    // - newWidth: the new width of the swapchain, in pixels.
-    // - newHeight: the new height of the swapchain, in pixels.
-    void ControlCore::_doResizeUnderLock(const double newWidth,
-                                         const double newHeight)
+    // - <none>
+    // Return Value:
+    // - <none>
+    void ControlCore::_refreshSizeUnderLock()
     {
-        SIZE size;
-        size.cx = static_cast<long>(newWidth);
-        size.cy = static_cast<long>(newHeight);
+        auto cx = gsl::narrow_cast<short>(_panelWidth * _compositionScale);
+        auto cy = gsl::narrow_cast<short>(_panelHeight * _compositionScale);
 
         // Don't actually resize so small that a single character wouldn't fit
         // in either dimension. The buffer really doesn't like being size 0.
-        if (size.cx < _actualFont.GetSize().X || size.cy < _actualFont.GetSize().Y)
-        {
-            return;
-        }
+        cx = std::max(cx, _actualFont.GetSize().X);
+        cy = std::max(cy, _actualFont.GetSize().Y);
 
         // Convert our new dimensions to characters
-        const auto viewInPixels = Viewport::FromDimensions({ 0, 0 },
-                                                           { static_cast<short>(size.cx), static_cast<short>(size.cy) });
+        const auto viewInPixels = Viewport::FromDimensions({ 0, 0 }, { cx, cy });
         const auto vp = _renderEngine->GetViewportInCharacters(viewInPixels);
         const auto currentVP = _terminal->GetViewport();
-
-        // Don't actually resize if viewport dimensions didn't change
-        if (vp.Height() == currentVP.Height() && vp.Width() == currentVP.Width())
-        {
-            return;
-        }
 
         _terminal->ClearSelection();
 
         // Tell the dx engine that our window is now the new size.
-        THROW_IF_FAILED(_renderEngine->SetWindowSize(size));
+        THROW_IF_FAILED(_renderEngine->SetWindowSize({ cx, cy }));
 
         // Invalidate everything
         _renderer->TriggerRedrawAll();
@@ -879,15 +846,18 @@ namespace winrt::Microsoft::Terminal::Control::implementation
     void ControlCore::SizeChanged(const double width,
                                   const double height)
     {
+        // _refreshSizeUnderLock redraws the entire terminal.
+        // Don't call it if we don't have to.
+        if (_panelWidth == width && _panelHeight == height)
+        {
+            return;
+        }
+
         _panelWidth = width;
         _panelHeight = height;
 
         auto lock = _terminal->LockForWriting();
-        const auto currentEngineScale = _renderEngine->GetScaling();
-
-        auto scaledWidth = width * currentEngineScale;
-        auto scaledHeight = height * currentEngineScale;
-        _doResizeUnderLock(scaledWidth, scaledHeight);
+        _refreshSizeUnderLock();
     }
 
     void ControlCore::ScaleChanged(const double scale)
@@ -897,39 +867,25 @@ namespace winrt::Microsoft::Terminal::Control::implementation
             return;
         }
 
-        const auto currentEngineScale = _renderEngine->GetScaling();
-        // If we're getting a notification to change to the DPI we already
-        // have, then we're probably just beginning the DPI change. Since
-        // we'll get _another_ event with the real DPI, do nothing here for
-        // now. We'll also skip the next resize in _swapChainSizeChanged.
-        const bool dpiWasUnchanged = currentEngineScale == scale;
-        if (dpiWasUnchanged)
+        // _refreshSizeUnderLock redraws the entire terminal.
+        // Don't call it if we don't have to.
+        if (_compositionScale == scale)
         {
             return;
         }
 
-        const auto dpi = (float)(scale * USER_DEFAULT_SCREEN_DPI);
-
-        const auto actualFontOldSize = _actualFont.GetSize();
-
-        auto lock = _terminal->LockForWriting();
         _compositionScale = scale;
 
-        _renderer->TriggerFontChange(::base::saturated_cast<int>(dpi),
-                                     _desiredFont,
-                                     _actualFont);
-
-        const auto actualFontNewSize = _actualFont.GetSize();
-        if (actualFontNewSize != actualFontOldSize)
-        {
-            _refreshSizeUnderLock();
-        }
+        auto lock = _terminal->LockForWriting();
+        // _updateFont relies on the new _compositionScale set above
+        _updateFont();
+        _refreshSizeUnderLock();
     }
 
     void ControlCore::SetSelectionAnchor(til::point const& position)
     {
         auto lock = _terminal->LockForWriting();
-        _terminal->SetSelectionAnchor(position);
+        _terminal->SetSelectionAnchor(position.to_win32_coord());
     }
 
     // Method Description:
@@ -947,16 +903,13 @@ namespace winrt::Microsoft::Terminal::Control::implementation
         // you move its endpoints while it is generating a frame.
         auto lock = _terminal->LockForWriting();
 
-        const short lastVisibleRow = std::max<short>(_terminal->GetViewport().Height() - 1, 0);
-        const short lastVisibleCol = std::max<short>(_terminal->GetViewport().Width() - 1, 0);
-
         til::point terminalPosition{
-            std::clamp<short>(position.x<short>(), 0, lastVisibleCol),
-            std::clamp<short>(position.y<short>(), 0, lastVisibleRow)
+            std::clamp(position.x, 0, _terminal->GetViewport().Width() - 1),
+            std::clamp(position.y, 0, _terminal->GetViewport().Height() - 1)
         };
 
         // save location (for rendering) + render
-        _terminal->SetSelectionEnd(terminalPosition);
+        _terminal->SetSelectionEnd(terminalPosition.to_win32_coord());
         _renderer->TriggerSelection();
     }
 
@@ -1103,7 +1056,7 @@ namespace winrt::Microsoft::Terminal::Control::implementation
 
     til::color ControlCore::BackgroundColor() const
     {
-        return _terminal->GetColorTableEntry(TextColor::DEFAULT_BACKGROUND);
+        return _terminal->GetRenderSettings().GetColorAlias(ColorAlias::DefaultBackground);
     }
 
     // Method Description:
@@ -1310,12 +1263,18 @@ namespace winrt::Microsoft::Terminal::Control::implementation
 
         ::Search search(*GetUiaData(), text.c_str(), direction, sensitivity);
         auto lock = _terminal->LockForWriting();
-        if (search.FindNext())
+        const bool foundMatch{ search.FindNext() };
+        if (foundMatch)
         {
             _terminal->SetBlockSelection(false);
             search.Select();
             _renderer->TriggerSelection();
         }
+
+        // Raise a FoundMatch event, which the control will use to notify
+        // narrator if there was any results in the buffer
+        auto foundResults = winrt::make_self<implementation::FoundResultsArgs>(foundMatch);
+        _FoundMatchHandlers(*this, *foundResults);
     }
 
     // Method Description:
@@ -1388,9 +1347,8 @@ namespace winrt::Microsoft::Terminal::Control::implementation
     {
         auto lock = _terminal->LockForWriting();
 
-        auto& renderTarget = *_renderer;
-        auto& blinkingState = _terminal->GetBlinkingState();
-        blinkingState.ToggleBlinkingRendition(renderTarget);
+        auto& renderSettings = _terminal->GetRenderSettings();
+        renderSettings.ToggleBlinkRendition(*_renderer);
     }
 
     void ControlCore::BlinkCursor()
@@ -1424,7 +1382,7 @@ namespace winrt::Microsoft::Terminal::Control::implementation
         return _terminal != nullptr && _terminal->IsTrackingMouseInput();
     }
 
-    til::point ControlCore::CursorPosition() const
+    Core::Point ControlCore::CursorPosition() const
     {
         // If we haven't been initialized yet, then fake it.
         if (!_initializedTerminal)
@@ -1433,7 +1391,7 @@ namespace winrt::Microsoft::Terminal::Control::implementation
         }
 
         auto lock = _terminal->LockForReading();
-        return _terminal->GetCursorPosition();
+        return til::point{ _terminal->GetCursorPosition() }.to_core_point();
     }
 
     // This one's really pushing the boundary of what counts as "encapsulation".
@@ -1485,7 +1443,7 @@ namespace winrt::Microsoft::Terminal::Control::implementation
         {
             // If shift is pressed and there is a selection we extend it using
             // the selection mode (expand the "end" selection point)
-            _terminal->SetSelectionEnd(terminalPosition, mode);
+            _terminal->SetSelectionEnd(terminalPosition.to_win32_coord(), mode);
             selectionNeedsToBeCopied = true;
         }
         else if (mode != ::Terminal::SelectionExpansion::Char || shiftEnabled)
@@ -1493,7 +1451,7 @@ namespace winrt::Microsoft::Terminal::Control::implementation
             // If we are handling a double / triple-click or shift+single click
             // we establish selection using the selected mode
             // (expand both "start" and "end" selection points)
-            _terminal->MultiClickSelection(terminalPosition, mode);
+            _terminal->MultiClickSelection(terminalPosition.to_win32_coord(), mode);
             selectionNeedsToBeCopied = true;
         }
 
@@ -1701,6 +1659,7 @@ namespace winrt::Microsoft::Terminal::Control::implementation
         _settings->FocusedAppearance()->SetColorTableEntry(15, scheme.BrightWhite);
 
         _terminal->ApplyScheme(scheme);
+
         _renderEngine->SetSelectionBackground(til::color{ _settings->SelectionBackground() });
 
         _renderer->TriggerRedrawAll();
@@ -1710,6 +1669,18 @@ namespace winrt::Microsoft::Terminal::Control::implementation
     bool ControlCore::HasUnfocusedAppearance() const
     {
         return _settings->HasUnfocusedAppearance();
+    }
+
+    void ControlCore::AdjustOpacity(const double opacityAdjust, const bool relative)
+    {
+        if (relative)
+        {
+            AdjustOpacity(opacityAdjust);
+        }
+        else
+        {
+            _setOpacity(opacityAdjust);
+        }
     }
 
     bool ControlCore::_isBackgroundTransparent()

@@ -16,7 +16,8 @@ Author(s):
 
 #pragma once
 
-#include "../inc/IRenderTarget.hpp"
+#include "../inc/IRenderEngine.hpp"
+#include "../inc/RenderSettings.hpp"
 
 #include "thread.hpp"
 
@@ -25,31 +26,35 @@ Author(s):
 
 namespace Microsoft::Console::Render
 {
-    class Renderer : public IRenderTarget
+    class Renderer
     {
     public:
-        Renderer(IRenderData* pData,
+        Renderer(const RenderSettings& renderSettings,
+                 IRenderData* pData,
                  _In_reads_(cEngines) IRenderEngine** const pEngine,
                  const size_t cEngines,
                  std::unique_ptr<RenderThread> thread);
 
-        virtual ~Renderer();
+        ~Renderer();
 
         [[nodiscard]] HRESULT PaintFrame();
 
+        void NotifyPaintFrame() noexcept;
         void TriggerSystemRedraw(const RECT* const prcDirtyClient);
-        void TriggerRedraw(const Microsoft::Console::Types::Viewport& region) override;
-        void TriggerRedraw(const COORD* const pcoord) override;
-        void TriggerRedrawCursor(const COORD* const pcoord) override;
-        void TriggerRedrawAll() override;
-        void TriggerTeardown() noexcept override;
+        void TriggerRedraw(const Microsoft::Console::Types::Viewport& region);
+        void TriggerRedraw(const COORD* const pcoord);
+        void TriggerRedrawCursor(const COORD* const pcoord);
+        void TriggerRedrawAll();
+        void TriggerTeardown() noexcept;
 
-        void TriggerSelection() override;
-        void TriggerScroll() override;
-        void TriggerScroll(const COORD* const pcoordDelta) override;
+        void TriggerSelection();
+        void TriggerScroll();
+        void TriggerScroll(const COORD* const pcoordDelta);
 
-        void TriggerCircling() override;
-        void TriggerTitleChange() override;
+        void TriggerCircling();
+        void TriggerTitleChange();
+
+        void TriggerNewTextNotification(const std::wstring_view newText);
 
         void TriggerFontChange(const int iDpi,
                                const FontInfoDesired& FontInfoDesired,
@@ -80,7 +85,6 @@ namespace Microsoft::Console::Render
         static IRenderEngine::GridLineSet s_GetGridlines(const TextAttribute& textAttribute) noexcept;
         static bool s_IsSoftFontChar(const std::wstring_view& v, const size_t firstSoftFontChar, const size_t lastSoftFontChar);
 
-        void _NotifyPaintFrame();
         [[nodiscard]] HRESULT _PaintFrameForEngine(_In_ IRenderEngine* const pEngine) noexcept;
         bool _CheckViewportAndScroll();
         [[nodiscard]] HRESULT _PaintBackground(_In_ IRenderEngine* const pEngine);
@@ -99,6 +103,7 @@ namespace Microsoft::Console::Render
         [[nodiscard]] std::optional<CursorOptions> _GetCursorInfo();
         [[nodiscard]] HRESULT _PrepareRenderInfo(_In_ IRenderEngine* const pEngine);
 
+        const RenderSettings& _renderSettings;
         std::array<IRenderEngine*, 2> _engines{};
         IRenderData* _pData = nullptr; // Non-ownership pointer
         std::unique_ptr<RenderThread> _pThread;

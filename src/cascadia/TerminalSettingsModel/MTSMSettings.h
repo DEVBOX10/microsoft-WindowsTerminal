@@ -27,7 +27,7 @@ Author(s):
     X(bool, ForceFullRepaintRendering, "experimental.rendering.forceFullRepaint", false)                                                                   \
     X(bool, SoftwareRendering, "experimental.rendering.software", false)                                                                                   \
     X(bool, ForceVTInput, "experimental.input.forceVT", false)                                                                                             \
-    X(bool, TrimBlockSelection, "trimBlockSelection", false)                                                                                               \
+    X(bool, TrimBlockSelection, "trimBlockSelection", true)                                                                                                \
     X(bool, DetectURLs, "experimental.detectURLs", true)                                                                                                   \
     X(bool, AlwaysShowTabs, "alwaysShowTabs", true)                                                                                                        \
     X(bool, ShowTitleInTitlebar, "showTerminalTitleInTitlebar", true)                                                                                      \
@@ -78,6 +78,15 @@ Author(s):
     X(Windows::Foundation::Collections::IVector<winrt::hstring>, BellSound, "bellSound", nullptr)                                                              \
     X(bool, Elevate, "elevate", false)
 
+// Intentionally omitted Profile settings:
+// * Name
+// * Updates
+// * Guid
+// * Hidden
+// * Source
+// * Padding: needs special FromJson parsing
+// * TabColor: is an optional setting, so needs to be set with INHERITABLE_NULLABLE_SETTING
+
 #define MTSM_FONT_SETTINGS(X)                                                          \
     X(hstring, FontFace, "face", DEFAULT_FONT_FACE)                                    \
     X(int32_t, FontSize, "size", DEFAULT_FONT_SIZE)                                    \
@@ -97,3 +106,7 @@ Author(s):
     X(hstring, BackgroundImagePath, "backgroundImage")                                                                                                             \
     X(Model::IntenseStyle, IntenseTextStyle, "intenseTextStyle", Model::IntenseStyle::Bright)                                                                      \
     X(bool, AdjustIndistinguishableColors, "adjustIndistinguishableColors", true)
+
+// Intentionally omitted Appearance settings:
+// * ForegroundKey, BackgroundKey, SelectionBackgroundKey, CursorColorKey: all optional colors
+// * Opacity: needs special parsing

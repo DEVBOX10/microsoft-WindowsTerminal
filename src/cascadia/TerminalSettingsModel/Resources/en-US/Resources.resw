@@ -127,7 +127,7 @@
     <value>Split Pane...</value>
   </data>
   <data name="ApplicationDisplayNameUnpackaged" xml:space="preserve">
-    <value>Windows Terminal (Unpackaged)</value>
+    <value>Terminal (Unpackaged)</value>
     <comment>This display name is used when the application's name cannot be determined</comment>
   </data>
   <data name="ApplicationVersionUnknown" xml:space="preserve">
@@ -464,10 +464,11 @@
     <value>Rename window...</value>
   </data>
   <data name="GlobalSummonCommandKey" xml:space="preserve">
-    <value>Summon the Terminal window</value>
+    <value>Show/Hide the Terminal window</value>
   </data>
   <data name="QuakeModeCommandKey" xml:space="preserve">
-    <value>Summon Quake window</value>
+    <value>Show/Hide Quake window</value>
+    <comment>Quake is a well-known computer game and isn't related to earthquakes, etc. See https://en.wikipedia.org/wiki/Quake_(video_game)</comment>
   </data>
   <data name="FocusPaneCommandKey" xml:space="preserve">
     <value>Focus pane {0}</value>
@@ -502,6 +503,21 @@
   </data>
   <data name="QuitCommandKey" xml:space="preserve">
     <value>Quit the Terminal</value>
+  </data>
+  <data name="SetOpacityParentCommandName" xml:space="preserve">
+    <value>Set background opacity...</value>
+  </data>
+  <data name="IncreaseOpacityCommandKey" xml:space="preserve">
+    <value>Increase background opacity by {0}%</value>
+    <comment>A command to change how transparent the background of the window is</comment>
+  </data>
+  <data name="DecreaseOpacityCommandKey" xml:space="preserve">
+    <value>Decrease background opacity by {0}%</value>
+    <comment>A command to change how transparent the background of the window is</comment>
+  </data>
+  <data name="AdjustOpacityCommandKey" xml:space="preserve">
+    <value>Set background opacity to {0}%</value>
+    <comment>A command to change how transparent the background of the window is</comment>
   </data>
   <data name="RestoreLastClosedCommandKey" xml:space="preserve">
     <value>Restore the last closed pane or tab</value>

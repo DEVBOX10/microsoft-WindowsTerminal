@@ -342,6 +342,7 @@
         "toggleShaderEffects",
         "wt",
         "quit",
+        "adjustOpacity",
         "restoreLastClosed",
         "unbound"
       ],
@@ -484,7 +485,7 @@
           "type": "boolean",
           "default": false,
           "description": "This will override the profile's `elevate` setting."
-        },
+        }
       },
       "type": "object"
     },
@@ -860,7 +861,7 @@
             }
           }
         }
-      ],
+      ]
     },
     "SetFullScreenAction": {
       "description": "Arguments for a setFullScreen action",
@@ -880,7 +881,7 @@
             }
           }
         }
-      ],
+      ]
     },
     "SetMaximizedAction": {
       "description": "Arguments for a setMaximized action",
@@ -900,7 +901,7 @@
             }
           }
         }
-      ],
+      ]
     },
     "WtAction": {
       "description": "Arguments corresponding to a wt Action",
@@ -1385,6 +1386,34 @@
         }
       ]
     },
+    "AdjustOpacityAction": {
+      "description": "Changes the opacity of the active Terminal window. If `relative` is specified, then this action will increase/decrease relative to the current opacity.",
+      "allOf": [
+        {
+          "$ref": "#/$defs/ShortcutAction"
+        },
+        {
+          "properties": {
+            "action": {
+              "type": "string",
+              "const": "adjustOpacity"
+            },
+            "opacity": {
+              "type": "integer",
+              "minimum": -100,
+              "maximum": 100,
+              "default": 0,
+              "description": "How opaque the terminal should become or how much the opacity should be changed by, depending on the value of `relative`"
+            },
+            "relative": {
+              "type": "boolean",
+              "default": true,
+              "description": "If true, then adjust the current opacity by the given `opacity` parameter, additively. If false, set the opacity to exactly that value."
+            }
+          }
+        }
+      ]
+    },
     "Keybinding": {
       "additionalProperties": false,
       "properties": {
@@ -1494,6 +1523,9 @@
               "$ref": "#/$defs/QuakeModeAction"
             },
             {
+              "$ref": "#/$defs/AdjustOpacityAction"
+            },
+            {
               "type": "null"
             }
           ]
@@ -1601,7 +1633,7 @@
           "$ref": "#/$defs/CopyFormat"
         },
         "trimBlockSelection": {
-          "default": false,
+          "default": true,
           "description": "When set to true, trailing white-spaces will be removed from text in rectangular (block) selection while copied to your clipboard. When set to false, the white-spaces will be preserved.",
           "type": "boolean"
         },
@@ -1677,7 +1709,7 @@
         },
         "startOnUserLogin": {
           "default": false,
-          "description": "When set to true, this enables the launch of Windows Terminal at startup. Setting this to false will disable the startup task entry. If the Windows Terminal startup task entry is disabled either by org policy or by user action this setting will have no effect.",
+          "description": "When set to true, this enables the launch of Terminal at startup. Setting this to false will disable the startup task entry. If the Terminal startup task entry is disabled either by org policy or by user action this setting will have no effect.",
           "type": "boolean"
         },
         "firstWindowPreference": {
@@ -1729,7 +1761,7 @@
         },
         "useAcrylicInTabRow": {
           "default": false,
-          "description": "When set to true, the tab row will have an acrylic background with 50% opacity.",
+          "description": "When set to true, the tab row will have an acrylic material background with 50% opacity.",
           "type": "boolean"
         },
         "actions": {
@@ -2027,6 +2059,11 @@
           "description": "Use to set a path to a pixel shader to use with the Terminal. Overrides `experimental.retroTerminalEffect`. This is an experimental feature, and its continued existence is not guaranteed.",
           "type": "string"
         },
+        "experimental.useAtlasEngine": {
+          "description": "Enable using the experimental new rendering engine for this profile. This is an experimental feature, and its continued existence is not guaranteed.",
+          "type": "boolean",
+          "default": false
+        },
         "fontFace": {
           "default": "Cascadia Mono",
           "description": "[deprecated] Define 'face' within the 'font' object instead.",
@@ -2187,7 +2224,7 @@
         },
         "useAcrylic": {
           "default": false,
-          "description": "When set to true, the window will have an acrylic background. When set to false, the window will have a plain, untextured background.",
+          "description": "When set to true, the window will have an acrylic material background. When set to false, the window will have a plain, untextured background.",
           "type": "boolean"
         }
       },

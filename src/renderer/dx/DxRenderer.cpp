@@ -94,7 +94,6 @@ DxEngine::DxEngine() :
     _dpi{ USER_DEFAULT_SCREEN_DPI },
     _scale{ 1.0f },
     _prevScale{ 1.0f },
-    _intenseIsBold{ true },
     _chainMode{ SwapChainMode::ForComposition },
     _customLayout{},
     _customRenderer{ ::Microsoft::WRL::Make<CustomTextRenderer>() },
@@ -188,11 +187,7 @@ DxEngine::~DxEngine()
 // - entry - Entry function of shader
 // Return Value:
 // - Compiled binary. Errors are thrown and logged.
-inline Microsoft::WRL::ComPtr<ID3DBlob>
-_CompileShader(
-    std::string source,
-    std::string target,
-    std::string entry = "main")
+static Microsoft::WRL::ComPtr<ID3DBlob> _CompileShader(const std::string_view& source, const char* target)
 {
 #if !TIL_FEATURE_DXENGINESHADERSUPPORT_ENABLED
     THROW_HR(E_UNEXPECTED);
@@ -202,24 +197,24 @@ _CompileShader(
     Microsoft::WRL::ComPtr<ID3DBlob> error{};
 
     const HRESULT hr = D3DCompile(
-        source.c_str(),
+        source.data(),
         source.size(),
         nullptr,
         nullptr,
         nullptr,
-        entry.c_str(),
-        target.c_str(),
-        0,
+        "main",
+        target,
+        D3DCOMPILE_PACK_MATRIX_COLUMN_MAJOR | D3DCOMPILE_OPTIMIZATION_LEVEL3,
         0,
         &code,
         &error);
 
     if (FAILED(hr))
     {
-        LOG_HR_MSG(hr, "D3DCompile failed with %x.", static_cast<int>(hr));
+        LOG_HR_MSG(hr, "D3DCompile failed with %08x", hr);
         if (error)
         {
-            LOG_HR_MSG(hr, "D3DCompile error\n%*S", static_cast<int>(error->GetBufferSize()), static_cast<PWCHAR>(error->GetBufferPointer()));
+            LOG_HR_MSG(hr, "D3DCompile error\n%S", static_cast<const char*>(error->GetBufferPointer()));
         }
 
         THROW_HR(hr);
@@ -344,23 +339,41 @@ HRESULT DxEngine::_SetupTerminalEffects()
 
     // Setup the viewport.
     D3D11_VIEWPORT vp;
-    vp.Width = _displaySizePixels.width<float>();
-    vp.Height = _displaySizePixels.height<float>();
+    vp.Width = static_cast<float>(_displaySizePixels.width);
+    vp.Height = static_cast<float>(_displaySizePixels.height);
     vp.MinDepth = 0.0f;
     vp.MaxDepth = 1.0f;
     vp.TopLeftX = 0;
     vp.TopLeftY = 0;
     _d3dDeviceContext->RSSetViewports(1, &vp);
 
+    const char* shaderTargetVS = nullptr;
+    const char* shaderTargetPS = nullptr;
+    switch (_d3dDevice->GetFeatureLevel())
+    {
+    case D3D_FEATURE_LEVEL_10_0:
+        shaderTargetVS = "vs_4_0";
+        shaderTargetPS = "ps_4_0";
+        break;
+    case D3D_FEATURE_LEVEL_10_1:
+        shaderTargetVS = "vs_4_1";
+        shaderTargetPS = "ps_4_1";
+        break;
+    default:
+        shaderTargetVS = "vs_5_0";
+        shaderTargetPS = "ps_5_0";
+        break;
+    }
+
     // Prepare shaders.
-    auto vertexBlob = _CompileShader(screenVertexShaderString, "vs_5_0");
+    auto vertexBlob = _CompileShader(&screenVertexShaderString[0], shaderTargetVS);
     Microsoft::WRL::ComPtr<ID3DBlob> pixelBlob;
     // As the pixel shader source is user provided it's possible there's a problem with it
     //  so load it inside a try catch, on any error log and fallback on the error pixel shader
     //  If even the error pixel shader fails to load rely on standard exception handling
     try
     {
-        pixelBlob = _CompileShader(pixelShaderSource, "ps_5_0");
+        pixelBlob = _CompileShader(pixelShaderSource, shaderTargetPS);
     }
     catch (...)
     {
@@ -463,8 +476,8 @@ void DxEngine::_ComputePixelShaderSettings() noexcept
             _pixelShaderSettings.Scale = _scale;
 
             // Set the display resolution
-            const float w = 1.0f * _displaySizePixels.width<UINT>();
-            const float h = 1.0f * _displaySizePixels.height<UINT>();
+            const float w = static_cast<float>(_displaySizePixels.width);
+            const float h = static_cast<float>(_displaySizePixels.height);
             _pixelShaderSettings.Resolution = XMFLOAT2{ w, h };
 
             // Set the background
@@ -543,11 +556,12 @@ try
                               // D3D11_CREATE_DEVICE_DEBUG |
                               D3D11_CREATE_DEVICE_SINGLETHREADED;
 
-    const std::array<D3D_FEATURE_LEVEL, 5> FeatureLevels{ D3D_FEATURE_LEVEL_11_1,
-                                                          D3D_FEATURE_LEVEL_11_0,
-                                                          D3D_FEATURE_LEVEL_10_1,
-                                                          D3D_FEATURE_LEVEL_10_0,
-                                                          D3D_FEATURE_LEVEL_9_1 };
+    static constexpr std::array FeatureLevels{
+        D3D_FEATURE_LEVEL_11_1,
+        D3D_FEATURE_LEVEL_11_0,
+        D3D_FEATURE_LEVEL_10_1,
+        D3D_FEATURE_LEVEL_10_0,
+    };
 
     // Trying hardware first for maximum performance, then trying WARP (software) renderer second
     // in case we're running inside a downlevel VM where hardware passthrough isn't enabled like
@@ -592,7 +606,7 @@ try
     RETURN_IF_FAILED(_d3dDevice.As(&_dxgiDevice));
     RETURN_IF_FAILED(_d2dFactory->CreateDevice(_dxgiDevice.Get(), _d2dDevice.ReleaseAndGetAddressOf()));
 
-    // Create a device context out of it (supercedes render targets)
+    // Create a device context out of it (supersedes render targets)
     RETURN_IF_FAILED(_d2dDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &_d2dDeviceContext));
 
     if (createSwapChain)
@@ -653,8 +667,8 @@ try
             RETURN_IF_FAILED(_dxgiFactory2.As(&_dxgiFactoryMedia));
 
             // Use the given target size for compositions.
-            _swapChainDesc.Width = _displaySizePixels.width<UINT>();
-            _swapChainDesc.Height = _displaySizePixels.height<UINT>();
+            _swapChainDesc.Width = _displaySizePixels.narrow_width<UINT>();
+            _swapChainDesc.Height = _displaySizePixels.narrow_height<UINT>();
 
             // We're doing advanced composition pretty much for the purpose of pretty alpha, so turn it on.
             _swapChainDesc.AlphaMode = DXGI_ALPHA_MODE_PREMULTIPLIED;
@@ -942,8 +956,8 @@ try
     return _dwriteFactory->CreateTextLayout(string,
                                             gsl::narrow<UINT32>(stringLength),
                                             _fontRenderData->DefaultTextFormat().Get(),
-                                            _displaySizePixels.width<float>(),
-                                            _fontRenderData->GlyphCell().height() != 0 ? _fontRenderData->GlyphCell().height<float>() : _displaySizePixels.height<float>(),
+                                            static_cast<float>(_displaySizePixels.width),
+                                            _fontRenderData->GlyphCell().height != 0 ? _fontRenderData->GlyphCell().narrow_height<float>() : _displaySizePixels.narrow_height<float>(),
                                             ppTextLayout);
 }
 CATCH_RETURN()
@@ -965,7 +979,7 @@ CATCH_RETURN()
 [[nodiscard]] HRESULT DxEngine::SetWindowSize(const SIZE Pixels) noexcept
 try
 {
-    _sizeTarget = Pixels;
+    _sizeTarget = til::size{ Pixels };
     return S_OK;
 }
 CATCH_RETURN();
@@ -1006,7 +1020,7 @@ try
     {
         // Enable shader effects if the path isn't empty. Otherwise leave it untouched.
         _terminalEffectsEnabled = value.empty() ? _terminalEffectsEnabled : true;
-        _pixelShaderPath = { value };
+        _pixelShaderPath = std::wstring{ value };
         _recreateDeviceRequested = true;
         LOG_IF_FAILED(InvalidateAll());
     }
@@ -1036,17 +1050,6 @@ try
 }
 CATCH_LOG()
 
-void DxEngine::SetIntenseIsBold(bool enable) noexcept
-try
-{
-    if (_intenseIsBold != enable)
-    {
-        _intenseIsBold = enable;
-        LOG_IF_FAILED(InvalidateAll());
-    }
-}
-CATCH_LOG()
-
 HANDLE DxEngine::GetSwapChainHandle() noexcept
 {
     if (!_swapChainHandle)
@@ -1058,17 +1061,17 @@ HANDLE DxEngine::GetSwapChainHandle() noexcept
     return _swapChainHandle.get();
 }
 
-void DxEngine::_InvalidateRectangle(const til::rectangle& rc)
+void DxEngine::_InvalidateRectangle(const til::rect& rc)
 {
     const auto size = _invalidMap.size();
-    const auto topLeft = til::point{ 0, std::min(size.height(), rc.top()) };
-    const auto bottomRight = til::point{ size.width(), std::min(size.height(), rc.bottom()) };
-    _invalidMap.set({ topLeft, bottomRight });
+    const auto topLeft = til::point{ 0, std::min(size.height, rc.top) };
+    const auto bottomRight = til::point{ size.width, std::min(size.height, rc.bottom) };
+    _invalidMap.set(til::rect{ topLeft, bottomRight });
 }
 
 bool DxEngine::_IsAllInvalid() const noexcept
 {
-    return std::llabs(_invalidScroll.y()) >= _invalidMap.size().height();
+    return std::abs(_invalidScroll.y) >= _invalidMap.size().height;
 }
 
 // Routine Description:
@@ -1084,7 +1087,7 @@ try
 
     if (!_allInvalid)
     {
-        _InvalidateRectangle(Viewport::FromExclusive(*psrRegion).ToInclusive());
+        _InvalidateRectangle(til::rect{ Viewport::FromExclusive(*psrRegion).ToInclusive() });
     }
 
     return S_OK;
@@ -1117,7 +1120,7 @@ try
     {
         // Dirty client is in pixels. Use divide specialization against glyph factor to make conversion
         // to cells.
-        _InvalidateRectangle(til::rectangle{ *prcDirtyClient }.scale_down(_fontRenderData->GlyphCell()));
+        _InvalidateRectangle(til::rect{ *prcDirtyClient }.scale_down(_fontRenderData->GlyphCell()));
     }
 
     return S_OK;
@@ -1159,7 +1162,7 @@ try
 
     if (!_allInvalid)
     {
-        if (deltaCells != til::point{ 0, 0 })
+        if (deltaCells != til::point{})
         {
             // Shift the contents of the map and fill in revealed area.
             _invalidMap.translate(deltaCells, true);
@@ -1226,7 +1229,7 @@ CATCH_RETURN();
         RECT clientRect = { 0 };
         LOG_IF_WIN32_BOOL_FALSE(GetClientRect(_hwndTarget, &clientRect));
 
-        return til::rectangle{ clientRect }.size();
+        return til::rect{ clientRect }.size();
     }
     case SwapChainMode::ForComposition:
     {
@@ -1323,7 +1326,7 @@ try
             _d2dBitmap.Reset();
 
             // Change the buffer size and recreate the render target (and surface)
-            RETURN_IF_FAILED(_dxgiSwapChain->ResizeBuffers(2, clientSize.width<UINT>(), clientSize.height<UINT>(), _swapChainDesc.Format, _swapChainDesc.Flags));
+            RETURN_IF_FAILED(_dxgiSwapChain->ResizeBuffers(2, clientSize.narrow_width<UINT>(), clientSize.narrow_height<UINT>(), _swapChainDesc.Format, _swapChainDesc.Flags));
             RETURN_IF_FAILED(_PrepareRenderTarget());
 
             // OK we made it past the parts that can cause errors. We can release our failure handler.
@@ -1354,7 +1357,7 @@ try
                                                                _ShouldForceGrayscaleAA(),
                                                                _dwriteFactory.Get(),
                                                                spacing,
-                                                               glyphCellSize,
+                                                               glyphCellSize.to_d2d_size(),
                                                                _d2dDeviceContext->GetSize(),
                                                                std::nullopt,
                                                                D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
@@ -1391,11 +1394,11 @@ try
         {
             if (_invalidScroll != til::point{ 0, 0 })
             {
-                // Copy `til::rectangles` into RECT map.
+                // Copy `til::rects` into RECT map.
                 _presentDirty.assign(_invalidMap.begin(), _invalidMap.end());
 
                 // Scale all dirty rectangles into pixels
-                std::transform(_presentDirty.begin(), _presentDirty.end(), _presentDirty.begin(), [&](til::rectangle rc) {
+                std::transform(_presentDirty.begin(), _presentDirty.end(), _presentDirty.begin(), [&](const til::rect& rc) {
                     return rc.scale_up(_fontRenderData->GlyphCell());
                 });
 
@@ -1403,20 +1406,25 @@ try
                 const auto scrollPixels = (_invalidScroll * _fontRenderData->GlyphCell());
 
                 // The scroll rect is the entire field of cells, but in pixels.
-                til::rectangle scrollArea{ _invalidMap.size() * _fontRenderData->GlyphCell() };
+                til::rect scrollArea{ _invalidMap.size() * _fontRenderData->GlyphCell() };
 
                 // Reduce the size of the rectangle by the scroll.
                 scrollArea -= til::size{} - scrollPixels;
 
                 // Assign the area to the present storage
-                _presentScroll = scrollArea;
+                _presentScroll = scrollArea.to_win32_rect();
 
                 // Pass the offset.
-                _presentOffset = scrollPixels;
+                _presentOffset = scrollPixels.to_win32_point();
 
                 // Now fill up the parameters structure from the member variables.
                 _presentParams.DirtyRectsCount = gsl::narrow<UINT>(_presentDirty.size());
-                _presentParams.pDirtyRects = _presentDirty.data();
+
+                // It's not nice to use reinterpret_cast between til::rect and RECT,
+                // but to be honest... it does save a ton of type juggling.
+                static_assert(sizeof(decltype(_presentDirty)::value_type) == sizeof(RECT));
+#pragma warning(suppress : 26490) // Don't use reinterpret_cast (type.1).
+                _presentParams.pDirtyRects = reinterpret_cast<RECT*>(_presentDirty.data());
 
                 _presentParams.pScrollOffset = &_presentOffset;
                 _presentParams.pScrollRect = &_presentScroll;
@@ -1646,7 +1654,7 @@ try
         // Runs are counts of cells.
         // Use a transform by the size of one cell to convert cells-to-pixels
         // as we clear.
-        _d2dDeviceContext->SetTransform(D2D1::Matrix3x2F::Scale(_fontRenderData->GlyphCell()));
+        _d2dDeviceContext->SetTransform(D2D1::Matrix3x2F::Scale(_fontRenderData->GlyphCell().to_d2d_size()));
         for (const auto& rect : _invalidMap.runs())
         {
             // Use aliased.
@@ -1654,7 +1662,7 @@ try
             // the edges are cut nice and sharp (not blended by anti-aliasing).
             // For performance reasons, it takes a lot less work to not
             // do anti-alias blending.
-            _d2dDeviceContext->PushAxisAlignedClip(rect, D2D1_ANTIALIAS_MODE_ALIASED);
+            _d2dDeviceContext->PushAxisAlignedClip(rect.to_d2d_rect(), D2D1_ANTIALIAS_MODE_ALIASED);
             _d2dDeviceContext->Clear(nothing);
             _d2dDeviceContext->PopAxisAlignedClip();
         }
@@ -1680,7 +1688,7 @@ CATCH_RETURN()
 try
 {
     // Calculate positioning of our origin.
-    const D2D1_POINT_2F origin = til::point{ coord } * _fontRenderData->GlyphCell();
+    const D2D1_POINT_2F origin = (til::point{ coord } * _fontRenderData->GlyphCell()).to_d2d_point();
 
     // Create the text layout
     RETURN_IF_FAILED(_customLayout->Reset());
@@ -1712,9 +1720,9 @@ try
     const auto existingColor = _d2dBrushForeground->GetColor();
     const auto restoreBrushOnExit = wil::scope_exit([&]() noexcept { _d2dBrushForeground->SetColor(existingColor); });
 
-    _d2dBrushForeground->SetColor(_ColorFFromColorRef(color));
+    _d2dBrushForeground->SetColor(_ColorFFromColorRef(color | 0xff000000));
 
-    const D2D1_SIZE_F font = _fontRenderData->GlyphCell();
+    const D2D1_SIZE_F font = _fontRenderData->GlyphCell().to_d2d_size();
     const D2D_POINT_2F target = { coordTarget.X * font.width, coordTarget.Y * font.height };
     const auto fullRunWidth = font.width * gsl::narrow_cast<unsigned>(cchLine);
 
@@ -1833,7 +1841,7 @@ try
     _d2dBrushForeground->SetColor(_selectionBackground);
     const auto resetColorOnExit = wil::scope_exit([&]() noexcept { _d2dBrushForeground->SetColor(existingColor); });
 
-    const D2D1_RECT_F draw = til::rectangle{ Viewport::FromExclusive(rect).ToInclusive() }.scale_up(_fontRenderData->GlyphCell());
+    const D2D1_RECT_F draw = til::rect{ Viewport::FromExclusive(rect).ToInclusive() }.scale_up(_fontRenderData->GlyphCell()).to_d2d_rect();
 
     _d2dDeviceContext->FillRectangle(draw, _d2dBrushForeground.Get());
 
@@ -1917,17 +1925,19 @@ CATCH_RETURN()
 // - Updates the default brush colors used for drawing
 // Arguments:
 // - textAttributes - Text attributes to use for the brush color
+// - renderSettings - The color table and modes required for rendering
 // - pData - The interface to console data structures required for rendering
 // - usingSoftFont - Whether we're rendering characters from a soft font
 // - isSettingDefaultBrushes - Lets us know that these are the default brushes to paint the swapchain background or selection
 // Return Value:
 // - S_OK or relevant DirectX error.
 [[nodiscard]] HRESULT DxEngine::UpdateDrawingBrushes(const TextAttribute& textAttributes,
-                                                     const gsl::not_null<IRenderData*> pData,
+                                                     const RenderSettings& renderSettings,
+                                                     const gsl::not_null<IRenderData*> /*pData*/,
                                                      const bool /*usingSoftFont*/,
                                                      const bool isSettingDefaultBrushes) noexcept
 {
-    const auto [colorForeground, colorBackground] = pData->GetAttributeColors(textAttributes);
+    const auto [colorForeground, colorBackground] = renderSettings.GetAttributeColorsWithAlpha(textAttributes);
 
     const bool usingCleartype = _antialiasingMode == D2D1_TEXT_ANTIALIAS_MODE_CLEARTYPE;
     const bool usingTransparency = _defaultBackgroundIsTransparent;
@@ -1967,7 +1977,7 @@ CATCH_RETURN()
     if (_drawingContext)
     {
         _drawingContext->forceGrayscaleAA = _ShouldForceGrayscaleAA();
-        _drawingContext->useBoldFont = _intenseIsBold && textAttributes.IsBold();
+        _drawingContext->useBoldFont = textAttributes.IsIntense() && renderSettings.GetRenderMode(RenderSettings::Mode::IntenseIsBold);
         _drawingContext->useItalicFont = textAttributes.IsItalic();
     }
 
@@ -2018,16 +2028,16 @@ CATCH_RETURN();
 
 [[nodiscard]] Viewport DxEngine::GetViewportInCharacters(const Viewport& viewInPixels) const noexcept
 {
-    const short widthInChars = base::saturated_cast<short>(viewInPixels.Width() / _fontRenderData->GlyphCell().width());
-    const short heightInChars = base::saturated_cast<short>(viewInPixels.Height() / _fontRenderData->GlyphCell().height());
+    const short widthInChars = base::saturated_cast<short>(viewInPixels.Width() / _fontRenderData->GlyphCell().width);
+    const short heightInChars = base::saturated_cast<short>(viewInPixels.Height() / _fontRenderData->GlyphCell().height);
 
     return Viewport::FromDimensions(viewInPixels.Origin(), { widthInChars, heightInChars });
 }
 
 [[nodiscard]] Viewport DxEngine::GetViewportInPixels(const Viewport& viewInCharacters) const noexcept
 {
-    const short widthInPixels = base::saturated_cast<short>(viewInCharacters.Width() * _fontRenderData->GlyphCell().width());
-    const short heightInPixels = base::saturated_cast<short>(viewInCharacters.Height() * _fontRenderData->GlyphCell().height());
+    const short widthInPixels = base::saturated_cast<short>(viewInCharacters.Width() * _fontRenderData->GlyphCell().width);
+    const short heightInPixels = base::saturated_cast<short>(viewInCharacters.Height() * _fontRenderData->GlyphCell().height);
 
     return Viewport::FromDimensions(viewInCharacters.Origin(), { widthInPixels, heightInPixels });
 }
@@ -2088,10 +2098,12 @@ float DxEngine::GetScaling() const noexcept
 [[nodiscard]] HRESULT DxEngine::GetProposedFont(const FontInfoDesired& pfiFontInfoDesired,
                                                 FontInfo& pfiFontInfo,
                                                 int const iDpi) noexcept
+try
 {
     DxFontRenderData fontRenderData(_dwriteFactory);
     return fontRenderData.UpdateFont(pfiFontInfoDesired, pfiFontInfo, iDpi);
 }
+CATCH_RETURN();
 
 // Routine Description:
 // - Gets the area that we currently believe is dirty within the character cell grid
@@ -2099,7 +2111,7 @@ float DxEngine::GetScaling() const noexcept
 // - area - Rectangle describing dirty area in characters.
 // Return Value:
 // - S_OK
-[[nodiscard]] HRESULT DxEngine::GetDirtyArea(gsl::span<const til::rectangle>& area) noexcept
+[[nodiscard]] HRESULT DxEngine::GetDirtyArea(gsl::span<const til::rect>& area) noexcept
 try
 {
     area = _invalidMap.runs();
@@ -2116,7 +2128,9 @@ CATCH_RETURN();
 [[nodiscard]] HRESULT DxEngine::GetFontSize(_Out_ COORD* const pFontSize) noexcept
 try
 {
-    *pFontSize = _fontRenderData->GlyphCell();
+    const auto size = _fontRenderData->GlyphCell();
+    pFontSize->X = size.narrow_width<short>();
+    pFontSize->Y = size.narrow_height<short>();
     return S_OK;
 }
 CATCH_RETURN();
