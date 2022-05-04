@@ -24,6 +24,14 @@ Author(s):
 #include "../../buffer/out/textBuffer.hpp"
 #include "../../buffer/out/CharRow.hpp"
 
+// fwdecl unittest classes
+#ifdef UNIT_TESTING
+namespace TerminalCoreUnitTests
+{
+    class ConptyRoundtripTests;
+};
+#endif
+
 namespace Microsoft::Console::Render
 {
     class Renderer
@@ -51,7 +59,7 @@ namespace Microsoft::Console::Render
         void TriggerScroll();
         void TriggerScroll(const COORD* const pcoordDelta);
 
-        void TriggerCircling();
+        void TriggerFlush(const bool circling);
         void TriggerTitleChange();
 
         void TriggerNewTextNotification(const std::wstring_view newText);
@@ -115,9 +123,11 @@ namespace Microsoft::Console::Render
         std::vector<SMALL_RECT> _previousSelection;
         std::function<void()> _pfnRendererEnteredErrorState;
         bool _destructing = false;
+        bool _forceUpdateViewport = true;
 
 #ifdef UNIT_TESTING
         friend class ConptyOutputTests;
+        friend class TerminalCoreUnitTests::ConptyRoundtripTests;
 #endif
     };
 }
