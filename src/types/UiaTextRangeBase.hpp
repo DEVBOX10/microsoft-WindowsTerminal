@@ -20,7 +20,7 @@ Author(s):
 
 #include "inc/viewport.hpp"
 #include "../buffer/out/textBuffer.hpp"
-#include "IUiaData.h"
+#include "../renderer/inc/IRenderData.hpp"
 #include "unicode.hpp"
 #include "IUiaTraceable.h"
 
@@ -51,18 +51,18 @@ namespace Microsoft::Console::Types
         static constexpr std::wstring_view DefaultWordDelimiter{ &UNICODE_SPACE, 1 };
 
         // degenerate range
-        virtual HRESULT RuntimeClassInitialize(_In_ IUiaData* pData,
+        virtual HRESULT RuntimeClassInitialize(_In_ Render::IRenderData* pData,
                                                _In_ IRawElementProviderSimple* const pProvider,
                                                _In_ std::wstring_view wordDelimiters = DefaultWordDelimiter) noexcept;
 
         // degenerate range at cursor position
-        virtual HRESULT RuntimeClassInitialize(_In_ IUiaData* pData,
+        virtual HRESULT RuntimeClassInitialize(_In_ Render::IRenderData* pData,
                                                _In_ IRawElementProviderSimple* const pProvider,
                                                _In_ const Cursor& cursor,
                                                _In_ std::wstring_view wordDelimiters = DefaultWordDelimiter) noexcept;
 
         // specific endpoint range
-        virtual HRESULT RuntimeClassInitialize(_In_ IUiaData* pData,
+        virtual HRESULT RuntimeClassInitialize(_In_ Render::IRenderData* pData,
                                                _In_ IRawElementProviderSimple* const pProvider,
                                                _In_ const til::point start,
                                                _In_ const til::point end,
@@ -82,7 +82,7 @@ namespace Microsoft::Console::Types
         bool IsDegenerate() const noexcept;
 
         // ITextRangeProvider methods
-        virtual IFACEMETHODIMP Clone(_Outptr_result_maybenull_ ITextRangeProvider** ppRetVal) = 0;
+        IFACEMETHODIMP Clone(_Outptr_result_maybenull_ ITextRangeProvider** ppRetVal) override = 0;
         IFACEMETHODIMP Compare(_In_opt_ ITextRangeProvider* pRange, _Out_ BOOL* pRetVal) noexcept override;
         IFACEMETHODIMP CompareEndpoints(_In_ TextPatternRangeEndpoint endpoint,
                                         _In_ ITextRangeProvider* pTargetRange,
@@ -121,7 +121,7 @@ namespace Microsoft::Console::Types
 
     protected:
         UiaTextRangeBase() = default;
-        IUiaData* _pData{ nullptr };
+        Render::IRenderData* _pData{ nullptr };
 
         IRawElementProviderSimple* _pProvider{ nullptr };
 

@@ -9,6 +9,7 @@
 #include "NotificationIcon.h"
 #include <dwmapi.h>
 #include <TerminalThemeHelpers.h>
+#include <CoreWindow.h>
 
 extern "C" IMAGE_DOS_HEADER __ImageBase;
 
@@ -26,8 +27,6 @@ using VirtualKeyModifiers = winrt::Windows::System::VirtualKeyModifiers;
 #define XAML_HOSTING_WINDOW_CLASS_NAME L"CASCADIA_HOSTING_WINDOW_CLASS"
 #define IDM_SYSTEM_MENU_BEGIN 0x1000
 
-const UINT WM_TASKBARCREATED = RegisterWindowMessage(L"TaskbarCreated");
-
 IslandWindow::IslandWindow() noexcept :
     _interopWindowHandle{ nullptr },
     _rootGrid{ nullptr },
@@ -38,7 +37,66 @@ IslandWindow::IslandWindow() noexcept :
 
 IslandWindow::~IslandWindow()
 {
-    _source.Close();
+    Close();
+}
+
+void IslandWindow::Close()
+{
+    static const bool isWindows11 = []() {
+        OSVERSIONINFOEXW osver{};
+        osver.dwOSVersionInfoSize = sizeof(osver);
+        osver.dwBuildNumber = 22000;
+
+        DWORDLONG dwlConditionMask = 0;
+        VER_SET_CONDITION(dwlConditionMask, VER_BUILDNUMBER, VER_GREATER_EQUAL);
+
+        if (VerifyVersionInfoW(&osver, VER_BUILDNUMBER, dwlConditionMask) != FALSE)
+        {
+            return true;
+        }
+        return false;
+    }();
+
+    if (!isWindows11)
+    {
+        // BODGY
+        //  ____   ____  _____   _______     __
+        // |  _ \ / __ \|  __ \ / ____\ \   / /
+        // | |_) | |  | | |  | | |  __ \ \_/ /
+        // |  _ <| |  | | |  | | | |_ | \   /
+        // | |_) | |__| | |__| | |__| |  | |
+        // |____/ \____/|_____/ \_____|  |_|
+        //
+        // There's a bug in Windows 10 where closing a DesktopWindowXamlSource
+        // on any thread will free an internal static resource that's used by
+        // XAML for the entire process. This would result in closing window
+        // essentially causing the entire app to crash.
+        //
+        // To avoid this, leak the XAML island. We only need to leak this on
+        // Windows 10, since the bug is fixed in Windows 11.
+        //
+        // See GH #15384, MSFT:32109540
+        auto a{ _source };
+        winrt::detach_abi(_source);
+
+        // </BODGY>
+    }
+
+    // GH#15454: Unset the user data for the window. This will prevent future
+    // callbacks that come onto our window message loop from being sent to the
+    // IslandWindow (or other derived class's) implementation.
+    //
+    // Specifically, this prevents a pending coroutine from being able to call
+    // something like ShowWindow, and have that come back on the IslandWindow
+    // message loop, where it'll end up asking XAML something that XAML is no
+    // longer able to answer.
+    SetWindowLongPtr(_window.get(), GWLP_USERDATA, 0);
+
+    if (_source)
+    {
+        _source.Close();
+        _source = nullptr;
+    }
 }
 
 HWND IslandWindow::GetInteropHandle() const
@@ -91,17 +149,6 @@ void IslandWindow::MakeWindow() noexcept
 }
 
 // Method Description:
-// - Called when no tab is remaining to close the window.
-// Arguments:
-// - <none>
-// Return Value:
-// - <none>
-void IslandWindow::Close()
-{
-    PostQuitMessage(0);
-}
-
-// Method Description:
 // - Set a callback to be called when we process a WM_CREATE message. This gives
 //   the AppHost a chance to resize the window to the proper size.
 // Arguments:
@@ -112,7 +159,7 @@ void IslandWindow::Close()
 //        window.
 // Return Value:
 // - <none>
-void IslandWindow::SetCreateCallback(std::function<void(const HWND, const til::rect&, LaunchMode& launchMode)> pfn) noexcept
+void IslandWindow::SetCreateCallback(std::function<void(const HWND, const til::rect&)> pfn) noexcept
 {
     _pfnCreateCallback = pfn;
 }
@@ -154,19 +201,13 @@ void IslandWindow::_HandleCreateWindow(const WPARAM, const LPARAM lParam) noexce
     rc.right = rc.left + pcs->cx;
     rc.bottom = rc.top + pcs->cy;
 
-    auto launchMode = LaunchMode::DefaultMode;
     if (_pfnCreateCallback)
     {
-        _pfnCreateCallback(_window.get(), rc, launchMode);
+        _pfnCreateCallback(_window.get(), rc);
     }
 
-    auto nCmdShow = SW_SHOW;
-    if (WI_IsFlagSet(launchMode, LaunchMode::MaximizedMode))
-    {
-        nCmdShow = SW_MAXIMIZE;
-    }
-
-    ShowWindow(_window.get(), nCmdShow);
+    // GH#11561: DO NOT call ShowWindow here. The AppHost will call ShowWindow
+    // once the app has completed its initialization.
 
     UpdateWindow(_window.get());
 
@@ -211,10 +252,10 @@ LRESULT IslandWindow::_OnSizing(const WPARAM wParam, const LPARAM lParam)
 
     const auto nonClientSize = GetTotalNonClientExclusiveSize(dpix);
 
-    auto clientWidth = winRect->right - winRect->left - nonClientSize.cx;
+    auto clientWidth = winRect->right - winRect->left - nonClientSize.width;
     clientWidth = std::max(minWidthScaled, clientWidth);
 
-    auto clientHeight = winRect->bottom - winRect->top - nonClientSize.cy;
+    auto clientHeight = winRect->bottom - winRect->top - nonClientSize.height;
 
     // If we're the quake window, prevent resizing on all sides except the
     // bottom. This also applies to resizing with the Alt+Space menu
@@ -251,12 +292,12 @@ LRESULT IslandWindow::_OnSizing(const WPARAM wParam, const LPARAM lParam)
     case WMSZ_LEFT:
     case WMSZ_TOPLEFT:
     case WMSZ_BOTTOMLEFT:
-        winRect->left = winRect->right - (clientWidth + nonClientSize.cx);
+        winRect->left = winRect->right - (clientWidth + nonClientSize.width);
         break;
     case WMSZ_RIGHT:
     case WMSZ_TOPRIGHT:
     case WMSZ_BOTTOMRIGHT:
-        winRect->right = winRect->left + (clientWidth + nonClientSize.cx);
+        winRect->right = winRect->left + (clientWidth + nonClientSize.width);
         break;
     }
 
@@ -266,12 +307,12 @@ LRESULT IslandWindow::_OnSizing(const WPARAM wParam, const LPARAM lParam)
     case WMSZ_BOTTOM:
     case WMSZ_BOTTOMLEFT:
     case WMSZ_BOTTOMRIGHT:
-        winRect->bottom = winRect->top + (clientHeight + nonClientSize.cy);
+        winRect->bottom = winRect->top + (clientHeight + nonClientSize.height);
         break;
     case WMSZ_TOP:
     case WMSZ_TOPLEFT:
     case WMSZ_TOPRIGHT:
-        winRect->top = winRect->bottom - (clientHeight + nonClientSize.cy);
+        winRect->top = winRect->bottom - (clientHeight + nonClientSize.height);
         break;
     }
 
@@ -313,6 +354,11 @@ void IslandWindow::Initialize()
 
     // stash the child interop handle so we can resize it when the main hwnd is resized
     interop->get_WindowHandle(&_interopWindowHandle);
+
+    // Immediately hide our XAML island hwnd. On earlier versions of Windows,
+    // this HWND could sometimes appear as an actual window in the taskbar
+    // without this!
+    ShowWindow(_interopWindowHandle, SW_HIDE);
 
     _rootGrid = winrt::Windows::UI::Xaml::Controls::Grid();
     _source.Content(_rootGrid);
@@ -389,8 +435,8 @@ void IslandWindow::_OnGetMinMaxInfo(const WPARAM /*wParam*/, const LPARAM lParam
     const auto nonClientSizeScaled = GetTotalNonClientExclusiveSize(dpix);
 
     auto lpMinMaxInfo = reinterpret_cast<LPMINMAXINFO>(lParam);
-    lpMinMaxInfo->ptMinTrackSize.x = _calculateTotalSize(true, minimumWidth * dpix / USER_DEFAULT_SCREEN_DPI, nonClientSizeScaled.cx);
-    lpMinMaxInfo->ptMinTrackSize.y = _calculateTotalSize(false, minimumHeight * dpiy / USER_DEFAULT_SCREEN_DPI, nonClientSizeScaled.cy);
+    lpMinMaxInfo->ptMinTrackSize.x = _calculateTotalSize(true, minimumWidth * dpix / USER_DEFAULT_SCREEN_DPI, nonClientSizeScaled.width);
+    lpMinMaxInfo->ptMinTrackSize.y = _calculateTotalSize(false, minimumHeight * dpiy / USER_DEFAULT_SCREEN_DPI, nonClientSizeScaled.height);
 }
 
 // Method Description:
@@ -404,18 +450,19 @@ void IslandWindow::_OnGetMinMaxInfo(const WPARAM /*wParam*/, const LPARAM lParam
 // - The total dimension
 long IslandWindow::_calculateTotalSize(const bool isWidth, const long clientSize, const long nonClientSize)
 {
-    return gsl::narrow_cast<int>(_pfnSnapDimensionCallback(isWidth, gsl::narrow_cast<float>(clientSize)) + nonClientSize);
+    if (_pfnSnapDimensionCallback)
+    {
+        return gsl::narrow_cast<int>(_pfnSnapDimensionCallback(isWidth, gsl::narrow_cast<float>(clientSize)) + nonClientSize);
+    }
+    // We might have been called in WM_CREATE, before we've initialized XAML or
+    // our page. That's okay.
+    return clientSize + nonClientSize;
 }
 
 [[nodiscard]] LRESULT IslandWindow::MessageHandler(UINT const message, WPARAM const wparam, LPARAM const lparam) noexcept
 {
     switch (message)
     {
-    case WM_HOTKEY:
-    {
-        _HotkeyPressedHandlers(static_cast<long>(wparam));
-        return 0;
-    }
     case WM_GETMINMAXINFO:
     {
         _OnGetMinMaxInfo(wparam, lparam);
@@ -499,6 +546,24 @@ long IslandWindow::_calculateTotalSize(const bool isWidth, const long clientSize
                 return 0;
             }
         }
+
+        // BODGY This is a fix for the upstream:
+        //
+        // https://github.com/microsoft/microsoft-ui-xaml/issues/3577
+        //
+        // ContentDialogs don't resize themselves when the XAML island resizes.
+        // However, if we manually resize our CoreWindow, that'll actually
+        // trigger a resize of the ContentDialog.
+        if (const auto& coreWindow{ winrt::Windows::UI::Core::CoreWindow::GetForCurrentThread() })
+        {
+            if (const auto& interop{ coreWindow.as<ICoreWindowInterop>() })
+            {
+                HWND coreWindowInterop;
+                interop->get_WindowHandle(&coreWindowInterop);
+                PostMessage(coreWindowInterop, message, wparam, lparam);
+            }
+        }
+
         break;
     }
     case WM_MOVING:
@@ -613,30 +678,6 @@ long IslandWindow::_calculateTotalSize(const bool isWidth, const long clientSize
         }
         break;
     }
-    case CM_NOTIFY_FROM_NOTIFICATION_AREA:
-    {
-        switch (LOWORD(lparam))
-        {
-        case NIN_SELECT:
-        case NIN_KEYSELECT:
-        {
-            _NotifyNotificationIconPressedHandlers();
-            return 0;
-        }
-        case WM_CONTEXTMENU:
-        {
-            const til::point eventPoint{ GET_X_LPARAM(wparam), GET_Y_LPARAM(wparam) };
-            _NotifyShowNotificationIconContextMenuHandlers(eventPoint);
-            return 0;
-        }
-        }
-        break;
-    }
-    case WM_MENUCOMMAND:
-    {
-        _NotifyNotificationIconMenuItemSelectedHandlers((HMENU)lparam, (UINT)wparam);
-        return 0;
-    }
     case WM_SYSCOMMAND:
     {
         // the low 4 bits contain additional information (that we don't care about)
@@ -655,6 +696,24 @@ long IslandWindow::_calculateTotalSize(const bool isWidth, const long clientSize
         if (search != _systemMenuItems.end())
         {
             search->second.callback();
+        }
+        break;
+    }
+    case WM_SETTINGCHANGE:
+    {
+        // Currently, we only support checking when the OS theme changes. In
+        // that case, wParam is 0. Re-evaluate when we decide to reload env vars
+        // (GH#1125)
+        if (wparam == 0 && lparam != 0)
+        {
+            const std::wstring param{ (wchar_t*)lparam };
+            // ImmersiveColorSet seems to be the notification that the OS theme
+            // changed. If that happens, let the app know, so it can hot-reload
+            // themes, color schemes that might depend on the OS theme
+            if (param == L"ImmersiveColorSet")
+            {
+                _UpdateSettingsRequestedHandlers();
+            }
         }
         break;
     }
@@ -695,16 +754,6 @@ long IslandWindow::_calculateTotalSize(const bool isWidth, const long clientSize
         _AutomaticShutdownRequestedHandlers();
         return true;
     }
-    default:
-        // We'll want to receive this message when explorer.exe restarts
-        // so that we can re-add our icon to the notification area.
-        // This unfortunately isn't a switch case because we register the
-        // message at runtime.
-        if (message == WM_TASKBARCREATED)
-        {
-            _NotifyReAddNotificationIconHandlers();
-            return 0;
-        }
     }
 
     // TODO: handle messages here...
@@ -793,7 +842,7 @@ void IslandWindow::OnAppInitialized()
 {
     // Do a quick resize to force the island to paint
     const auto size = GetPhysicalSize();
-    OnSize(size.cx, size.cy);
+    OnSize(size.width, size.height);
 }
 
 // Method Description:
@@ -1222,66 +1271,6 @@ void IslandWindow::_SetIsFullscreen(const bool fullscreenEnabled)
 }
 
 // Method Description:
-// - Call UnregisterHotKey once for each previously registered hotkey.
-// Return Value:
-// - <none>
-void IslandWindow::UnregisterHotKey(const int index) noexcept
-{
-    TraceLoggingWrite(
-        g_hWindowsTerminalProvider,
-        "UnregisterHotKey",
-        TraceLoggingDescription("Emitted when clearing previously set hotkeys"),
-        TraceLoggingInt64(index, "index", "the index of the hotkey to remove"),
-        TraceLoggingLevel(WINEVENT_LEVEL_VERBOSE),
-        TraceLoggingKeyword(TIL_KEYWORD_TRACE));
-
-    LOG_IF_WIN32_BOOL_FALSE(::UnregisterHotKey(_window.get(), index));
-}
-
-// Method Description:
-// - Call RegisterHotKey to attempt to register that keybinding as a global hotkey.
-// - When these keys are pressed, we'll get a WM_HOTKEY message with the payload
-//   containing the index we registered here.
-// - Call UnregisterHotKey() before registering your hotkeys.
-//   See: https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-registerhotkey#remarks
-// Arguments:
-// - hotkey: The key-combination to register.
-// Return Value:
-// - <none>
-bool IslandWindow::RegisterHotKey(const int index, const winrt::Microsoft::Terminal::Control::KeyChord& hotkey) noexcept
-{
-    const auto vkey = hotkey.Vkey();
-    auto hotkeyFlags = MOD_NOREPEAT;
-    {
-        const auto modifiers = hotkey.Modifiers();
-        WI_SetFlagIf(hotkeyFlags, MOD_WIN, WI_IsFlagSet(modifiers, VirtualKeyModifiers::Windows));
-        WI_SetFlagIf(hotkeyFlags, MOD_ALT, WI_IsFlagSet(modifiers, VirtualKeyModifiers::Menu));
-        WI_SetFlagIf(hotkeyFlags, MOD_CONTROL, WI_IsFlagSet(modifiers, VirtualKeyModifiers::Control));
-        WI_SetFlagIf(hotkeyFlags, MOD_SHIFT, WI_IsFlagSet(modifiers, VirtualKeyModifiers::Shift));
-    }
-
-    // TODO GH#8888: We should display a warning of some kind if this fails.
-    // This can fail if something else already bound this hotkey.
-    const auto result = ::RegisterHotKey(_window.get(), index, hotkeyFlags, vkey);
-    LOG_IF_WIN32_BOOL_FALSE(result);
-
-    TraceLoggingWrite(g_hWindowsTerminalProvider,
-                      "RegisterHotKey",
-                      TraceLoggingDescription("Emitted when setting hotkeys"),
-                      TraceLoggingInt64(index, "index", "the index of the hotkey to add"),
-                      TraceLoggingUInt64(vkey, "vkey", "the key"),
-                      TraceLoggingUInt64(WI_IsFlagSet(hotkeyFlags, MOD_WIN), "win", "is WIN in the modifiers"),
-                      TraceLoggingUInt64(WI_IsFlagSet(hotkeyFlags, MOD_ALT), "alt", "is ALT in the modifiers"),
-                      TraceLoggingUInt64(WI_IsFlagSet(hotkeyFlags, MOD_CONTROL), "control", "is CONTROL in the modifiers"),
-                      TraceLoggingUInt64(WI_IsFlagSet(hotkeyFlags, MOD_SHIFT), "shift", "is SHIFT in the modifiers"),
-                      TraceLoggingBool(result, "succeeded", "true if we succeeded"),
-                      TraceLoggingLevel(WINEVENT_LEVEL_VERBOSE),
-                      TraceLoggingKeyword(TIL_KEYWORD_TRACE));
-
-    return result;
-}
-
-// Method Description:
 // - Summon the window, or possibly dismiss it. If toggleVisibility is true,
 //   then we'll dismiss (minimize) the window if it's currently active.
 //   Otherwise, we'll always just try to activate the window.
@@ -1509,23 +1498,31 @@ void IslandWindow::_globalActivateWindow(const uint32_t dropdownDuration,
     }
     else
     {
-        const auto windowThreadProcessId = GetWindowThreadProcessId(oldForegroundWindow, nullptr);
-        const auto currentThreadId = GetCurrentThreadId();
+        // Try first to send a message to the current foreground window. If it's not responding, it may
+        // be waiting on us to finish launching. Passing SMTO_NOTIMEOUTIFNOTHUNG means that we get the same
+        // behavior as before--that is, waiting for the message loop--but we've done an early return if
+        // it turns out that it was hung.
+        // SendMessageTimeoutW returns nonzero if it succeeds.
+        if (0 != SendMessageTimeoutW(oldForegroundWindow, WM_NULL, 0, 0, SMTO_NOTIMEOUTIFNOTHUNG | SMTO_BLOCK | SMTO_ABORTIFHUNG, 1000, nullptr))
+        {
+            const auto windowThreadProcessId = GetWindowThreadProcessId(oldForegroundWindow, nullptr);
+            const auto currentThreadId = GetCurrentThreadId();
 
-        LOG_IF_WIN32_BOOL_FALSE(AttachThreadInput(windowThreadProcessId, currentThreadId, true));
-        // Just in case, add the thread detach as a scope_exit, to make _sure_ we do it.
-        auto detachThread = wil::scope_exit([windowThreadProcessId, currentThreadId]() {
-            LOG_IF_WIN32_BOOL_FALSE(AttachThreadInput(windowThreadProcessId, currentThreadId, false));
-        });
-        LOG_IF_WIN32_BOOL_FALSE(BringWindowToTop(_window.get()));
-        ShowWindow(_window.get(), SW_SHOW);
+            LOG_IF_WIN32_BOOL_FALSE(AttachThreadInput(windowThreadProcessId, currentThreadId, true));
+            // Just in case, add the thread detach as a scope_exit, to make _sure_ we do it.
+            auto detachThread = wil::scope_exit([windowThreadProcessId, currentThreadId]() {
+                LOG_IF_WIN32_BOOL_FALSE(AttachThreadInput(windowThreadProcessId, currentThreadId, false));
+            });
+            LOG_IF_WIN32_BOOL_FALSE(BringWindowToTop(_window.get()));
+            ShowWindow(_window.get(), SW_SHOW);
 
-        // Activate the window too. This will force us to the virtual desktop this
-        // window is on, if it's on another virtual desktop.
-        LOG_LAST_ERROR_IF_NULL(SetActiveWindow(_window.get()));
+            // Activate the window too. This will force us to the virtual desktop this
+            // window is on, if it's on another virtual desktop.
+            LOG_LAST_ERROR_IF_NULL(SetActiveWindow(_window.get()));
 
-        // Throw us on the active monitor.
-        _moveToMonitor(oldForegroundWindow, toMonitor);
+            // Throw us on the active monitor.
+            _moveToMonitor(oldForegroundWindow, toMonitor);
+        }
     }
 }
 
@@ -1874,4 +1871,43 @@ void IslandWindow::RemoveFromSystemMenu(const winrt::hstring& itemLabel)
         return;
     }
     _systemMenuItems.erase(it->first);
+}
+
+void IslandWindow::UseMica(const bool newValue, const double /*titlebarOpacity*/)
+{
+    // This block of code enables Mica for our window. By all accounts, this
+    // version of the code will only work on Windows 11, SV2. There's a slightly
+    // different API surface for enabling Mica on Windows 11 22000.0.
+    //
+    // This API was only publicly supported as of Windows 11 SV2, 22621. Before
+    // that version, this API will just return an error and do nothing silently.
+
+    const int attribute = newValue ? DWMSBT_MAINWINDOW : DWMSBT_NONE;
+    std::ignore = DwmSetWindowAttribute(GetHandle(), DWMWA_SYSTEMBACKDROP_TYPE, &attribute, sizeof(attribute));
+}
+
+// Method Description:
+// - This method is called when the window receives the WM_NCCREATE message.
+// Return Value:
+// - The value returned from the window proc.
+[[nodiscard]] LRESULT IslandWindow::OnNcCreate(WPARAM wParam, LPARAM lParam) noexcept
+{
+    const auto ret = BaseWindow::OnNcCreate(wParam, lParam);
+    if (!ret)
+    {
+        return FALSE;
+    }
+
+    // This is a hack to make the window borders dark instead of light.
+    // It must be done before WM_NCPAINT so that the borders are rendered with
+    // the correct theme.
+    // For more information, see GH#6620.
+    //
+    // Theoretically, we don't need this anymore, since _updateTheme will update
+    // the darkness of our window. However, we're keeping this call to prevent
+    // the window from appearing as a white rectangle for a frame before we load
+    // the rest of the settings.
+    LOG_IF_FAILED(TerminalTrySetDarkTheme(_window.get(), true));
+
+    return TRUE;
 }

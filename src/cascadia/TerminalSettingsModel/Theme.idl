@@ -15,7 +15,18 @@ namespace Microsoft.Terminal.Settings.Model
     {
         Always,
         Hover,
-        Never
+        Never,
+        ActiveOnly
+    };
+
+    [default_interface] runtimeclass ThemePair
+    {
+        ThemePair();
+        ThemePair(String name);
+        ThemePair(String darkName, String lightName);
+
+        String DarkName;
+        String LightName;
     };
 
     runtimeclass ThemeColor
@@ -32,11 +43,15 @@ namespace Microsoft.Terminal.Settings.Model
         Windows.UI.Xaml.Media.Brush Evaluate(Windows.UI.Xaml.ResourceDictionary res,
                                              Windows.UI.Xaml.Media.Brush terminalBackground,
                                              Boolean forTitlebar);
+        UInt8 UnfocusedTabOpacity { get; };
     }
 
     runtimeclass WindowTheme {
         Windows.UI.Xaml.ElementTheme RequestedTheme { get; };
         Boolean UseMica { get; };
+        Boolean RainbowFrame { get; };
+        ThemeColor Frame { get; };
+        ThemeColor UnfocusedFrame { get; };
     }
 
     runtimeclass TabRowTheme {
@@ -46,6 +61,7 @@ namespace Microsoft.Terminal.Settings.Model
 
     runtimeclass TabTheme {
         ThemeColor Background { get; };
+        ThemeColor UnfocusedBackground { get; };
         TabCloseButtonVisibility ShowCloseButton { get; };
     }
 
@@ -66,6 +82,7 @@ namespace Microsoft.Terminal.Settings.Model
 
         // A helper for retrieving the RequestedTheme out of the window property
         Windows.UI.Xaml.ElementTheme RequestedTheme { get; };
+        static Boolean IsSystemInDarkTheme();
 
     }
 }

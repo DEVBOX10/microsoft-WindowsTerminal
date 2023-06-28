@@ -447,7 +447,7 @@ void StateMachine::_ActionPrintString(const std::wstring_view string)
 void StateMachine::_ActionEscDispatch(const wchar_t wch)
 {
     _trace.TraceOnAction(L"EscDispatch");
-    _trace.DispatchSequenceTrace(_SafeExecuteWithLog(wch, [=]() {
+    _trace.DispatchSequenceTrace(_SafeExecute([=]() {
         return _engine->ActionEscDispatch(_identifier.Finalize(wch));
     }));
 }
@@ -462,7 +462,7 @@ void StateMachine::_ActionEscDispatch(const wchar_t wch)
 void StateMachine::_ActionVt52EscDispatch(const wchar_t wch)
 {
     _trace.TraceOnAction(L"Vt52EscDispatch");
-    _trace.DispatchSequenceTrace(_SafeExecuteWithLog(wch, [=]() {
+    _trace.DispatchSequenceTrace(_SafeExecute([=]() {
         return _engine->ActionVt52EscDispatch(_identifier.Finalize(wch), { _parameters.data(), _parameters.size() });
     }));
 }
@@ -477,7 +477,7 @@ void StateMachine::_ActionVt52EscDispatch(const wchar_t wch)
 void StateMachine::_ActionCsiDispatch(const wchar_t wch)
 {
     _trace.TraceOnAction(L"CsiDispatch");
-    _trace.DispatchSequenceTrace(_SafeExecuteWithLog(wch, [=]() {
+    _trace.DispatchSequenceTrace(_SafeExecute([=]() {
         return _engine->ActionCsiDispatch(_identifier.Finalize(wch), { _parameters.data(), _parameters.size() });
     }));
 }
@@ -635,7 +635,7 @@ void StateMachine::_ActionOscPut(const wchar_t wch)
 void StateMachine::_ActionOscDispatch(const wchar_t wch)
 {
     _trace.TraceOnAction(L"OscDispatch");
-    _trace.DispatchSequenceTrace(_SafeExecuteWithLog(wch, [=]() {
+    _trace.DispatchSequenceTrace(_SafeExecute([=]() {
         return _engine->ActionOscDispatch(wch, _oscParameter, _oscString);
     }));
 }
@@ -650,7 +650,7 @@ void StateMachine::_ActionOscDispatch(const wchar_t wch)
 void StateMachine::_ActionSs3Dispatch(const wchar_t wch)
 {
     _trace.TraceOnAction(L"Ss3Dispatch");
-    _trace.DispatchSequenceTrace(_SafeExecuteWithLog(wch, [=]() {
+    _trace.DispatchSequenceTrace(_SafeExecute([=]() {
         return _engine->ActionSs3Dispatch(wch, { _parameters.data(), _parameters.size() });
     }));
 }
@@ -666,7 +666,7 @@ void StateMachine::_ActionDcsDispatch(const wchar_t wch)
 {
     _trace.TraceOnAction(L"DcsDispatch");
 
-    const auto success = _SafeExecuteWithLog(wch, [=]() {
+    const auto success = _SafeExecute([=]() {
         _dcsStringHandler = _engine->ActionDcsDispatch(_identifier.Finalize(wch), { _parameters.data(), _parameters.size() });
         // If the returned handler is null, the sequence is not supported.
         return _dcsStringHandler != nullptr;
@@ -1175,6 +1175,7 @@ void StateMachine::_EventCsiEntry(const wchar_t wch)
     {
         _ActionCsiDispatch(wch);
         _EnterGround();
+        _ExecuteCsiCompleteCallback();
     }
 }
 
@@ -1213,6 +1214,7 @@ void StateMachine::_EventCsiIntermediate(const wchar_t wch)
     {
         _ActionCsiDispatch(wch);
         _EnterGround();
+        _ExecuteCsiCompleteCallback();
     }
 }
 
@@ -1294,6 +1296,7 @@ void StateMachine::_EventCsiParam(const wchar_t wch)
     {
         _ActionCsiDispatch(wch);
         _EnterGround();
+        _ExecuteCsiCompleteCallback();
     }
 }
 
@@ -1716,7 +1719,7 @@ void StateMachine::ProcessCharacter(const wchar_t wch)
         // code points that get translated as C1 controls when that is not their
         // intended use. In order to avoid them triggering unintentional escape
         // sequences, we ignore these characters by default.
-        if (_parserMode.test(Mode::AcceptC1))
+        if (_parserMode.any(Mode::AcceptC1, Mode::AlwaysAcceptC1))
         {
             ProcessCharacter(AsciiChars::ESC);
             ProcessCharacter(_c1To7Bit(wch));
@@ -1997,6 +2000,18 @@ bool StateMachine::IsProcessingLastCharacter() const noexcept
 }
 
 // Routine Description:
+// - Registers a function that will be called once the current CSI action is
+//   complete and the state machine has returned to the ground state.
+// Arguments:
+// - callback - The function that will be called
+// Return Value:
+// - <none>
+void StateMachine::OnCsiComplete(const std::function<void()> callback)
+{
+    _onCsiCompleteCallback = callback;
+}
+
+// Routine Description:
 // - Wherever the state machine is, whatever it's going, go back to ground.
 //     This is used by conhost to "jiggle the handle" - when VT support is
 //     turned off, we don't want any bad state left over for the next input it's turned on for
@@ -2048,13 +2063,23 @@ catch (...)
     return false;
 }
 
-template<typename TLambda>
-bool StateMachine::_SafeExecuteWithLog(const wchar_t wch, TLambda&& lambda)
+void StateMachine::_ExecuteCsiCompleteCallback()
 {
-    const bool success = _SafeExecute(std::forward<TLambda>(lambda));
-    if (!success)
+    if (_onCsiCompleteCallback)
     {
-        TermTelemetry::Instance().LogFailed(wch);
+        // We need to save the state of the string that we're currently
+        // processing in case the callback injects another string.
+        const auto savedCurrentString = _currentString;
+        const auto savedRunOffset = _runOffset;
+        const auto savedRunSize = _runSize;
+        // We also need to take ownership of the callback function before
+        // executing it so there's no risk of it being run more than once.
+        const auto callback = std::move(_onCsiCompleteCallback);
+        callback();
+        // Once the callback has returned, we can restore the original state
+        // and continue where we left off.
+        _currentString = savedCurrentString;
+        _runOffset = savedRunOffset;
+        _runSize = savedRunSize;
     }
-    return success;
 }

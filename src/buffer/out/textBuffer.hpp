@@ -54,7 +54,6 @@ filling in the last row, and updating the screen.
 #include "cursor.h"
 #include "Row.hpp"
 #include "TextAttribute.hpp"
-#include "UnicodeStorage.hpp"
 #include "../types/inc/Viewport.hpp"
 
 #include "../buffer/out/textBufferCellIterator.hpp"
@@ -73,14 +72,22 @@ public:
                const UINT cursorSize,
                const bool isActiveBuffer,
                Microsoft::Console::Render::Renderer& renderer);
-    TextBuffer(const TextBuffer& a) = delete;
+
+    TextBuffer(const TextBuffer&) = delete;
+    TextBuffer(TextBuffer&&) = delete;
+    TextBuffer& operator=(const TextBuffer&) = delete;
+    TextBuffer& operator=(TextBuffer&&) = delete;
+
+    ~TextBuffer();
 
     // Used for duplicating properties to another text buffer
     void CopyProperties(const TextBuffer& OtherBuffer) noexcept;
 
     // row manipulation
-    const ROW& GetRowByOffset(const til::CoordType index) const noexcept;
-    ROW& GetRowByOffset(const til::CoordType index) noexcept;
+    ROW& GetScratchpadRow();
+    ROW& GetScratchpadRow(const TextAttribute& attributes);
+    const ROW& GetRowByOffset(til::CoordType index) const;
+    ROW& GetRowByOffset(til::CoordType index);
 
     TextBufferCellIterator GetCellDataAt(const til::point at) const;
     TextBufferCellIterator GetCellLineDataAt(const til::point at) const;
@@ -90,6 +97,10 @@ public:
     TextBufferTextIterator GetTextDataAt(const til::point at, const Microsoft::Console::Types::Viewport limit) const;
 
     // Text insertion functions
+    static void ConsumeGrapheme(std::wstring_view& chars) noexcept;
+    void WriteLine(til::CoordType row, bool wrapAtEOL, const TextAttribute& attributes, RowWriteState& state);
+    void FillRect(const til::rect& rect, const std::wstring_view& fill, const TextAttribute& attributes);
+
     OutputCellIterator Write(const OutputCellIterator givenIt);
 
     OutputCellIterator Write(const OutputCellIterator givenIt,
@@ -101,13 +112,13 @@ public:
                                  const std::optional<bool> setWrap = std::nullopt,
                                  const std::optional<til::CoordType> limitRight = std::nullopt);
 
-    bool InsertCharacter(const wchar_t wch, const DbcsAttribute dbcsAttribute, const TextAttribute attr);
-    bool InsertCharacter(const std::wstring_view chars, const DbcsAttribute dbcsAttribute, const TextAttribute attr);
-    bool IncrementCursor();
-    bool NewlineCursor();
+    void InsertCharacter(const wchar_t wch, const DbcsAttribute dbcsAttribute, const TextAttribute attr);
+    void InsertCharacter(const std::wstring_view chars, const DbcsAttribute dbcsAttribute, const TextAttribute attr);
+    void IncrementCursor();
+    void NewlineCursor();
 
     // Scroll needs access to this to quickly rotate around the buffer.
-    bool IncrementCircularBuffer(const bool inVtMode = false);
+    void IncrementCircularBuffer(const TextAttribute& fillAttributes = {});
 
     til::point GetLastNonSpaceCharacter(std::optional<const Microsoft::Console::Types::Viewport> viewOptional = std::nullopt) const;
 
@@ -126,22 +137,19 @@ public:
 
     void SetCurrentAttributes(const TextAttribute& currentAttributes) noexcept;
 
-    void SetCurrentLineRendition(const LineRendition lineRendition);
-    void ResetLineRenditionRange(const til::CoordType startRow, const til::CoordType endRow) noexcept;
-    LineRendition GetLineRendition(const til::CoordType row) const noexcept;
-    bool IsDoubleWidthLine(const til::CoordType row) const noexcept;
+    void SetCurrentLineRendition(const LineRendition lineRendition, const TextAttribute& fillAttributes);
+    void ResetLineRenditionRange(const til::CoordType startRow, const til::CoordType endRow);
+    LineRendition GetLineRendition(const til::CoordType row) const;
+    bool IsDoubleWidthLine(const til::CoordType row) const;
 
-    til::CoordType GetLineWidth(const til::CoordType row) const noexcept;
-    til::point ClampPositionWithinLine(const til::point position) const noexcept;
-    til::point ScreenToBufferPosition(const til::point position) const noexcept;
-    til::point BufferToScreenPosition(const til::point position) const noexcept;
+    til::CoordType GetLineWidth(const til::CoordType row) const;
+    til::point ClampPositionWithinLine(const til::point position) const;
+    til::point ScreenToBufferPosition(const til::point position) const;
+    til::point BufferToScreenPosition(const til::point position) const;
 
-    void Reset();
+    void Reset() noexcept;
 
     [[nodiscard]] HRESULT ResizeTraditional(const til::size newSize) noexcept;
-
-    const UnicodeStorage& GetUnicodeStorage() const noexcept;
-    UnicodeStorage& GetUnicodeStorage() noexcept;
 
     void SetAsActiveBuffer(const bool isActiveBuffer) noexcept;
     bool IsActiveBuffer() const noexcept;
@@ -166,6 +174,7 @@ public:
     bool MoveToPreviousGlyph(til::point& pos, std::optional<til::point> limitOptional = std::nullopt) const;
 
     const std::vector<til::inclusive_rect> GetTextRects(til::point start, til::point end, bool blockSelection, bool bufferCoordinates) const;
+    std::vector<til::point_span> GetTextSpans(til::point start, til::point end, bool blockSelection, bool bufferCoordinates) const;
 
     void AddHyperlinkToMap(std::wstring_view uri, uint16_t id);
     std::wstring GetHyperlinkUriFromId(uint16_t id) const;
@@ -182,11 +191,15 @@ public:
         std::vector<std::vector<COLORREF>> BkAttr;
     };
 
+    size_t SpanLength(const til::point coordStart, const til::point coordEnd) const;
+
     const TextAndColor GetText(const bool includeCRLF,
                                const bool trimTrailingWhitespace,
                                const std::vector<til::inclusive_rect>& textRects,
                                std::function<std::pair<COLORREF, COLORREF>(const TextAttribute&)> GetAttributeColors = nullptr,
                                const bool formatWrappedRows = false) const;
+
+    std::wstring GetPlainText(const til::point& start, const til::point& end) const;
 
     static std::string GenHTML(const TextAndColor& rows,
                                const int fontHeightPoints,
@@ -215,55 +228,103 @@ public:
     interval_tree::IntervalTree<til::point, size_t> GetPatterns(const til::CoordType firstRow, const til::CoordType lastRow) const;
 
 private:
-    void _UpdateSize();
-    Microsoft::Console::Types::Viewport _size;
-    std::vector<ROW> _storage;
-    Cursor _cursor;
-
-    til::CoordType _firstRow; // indexes top row (not necessarily 0)
-
-    TextAttribute _currentAttributes;
-
-    // storage location for glyphs that can't fit into the buffer normally
-    UnicodeStorage _unicodeStorage;
-
-    bool _isActiveBuffer;
-    Microsoft::Console::Render::Renderer& _renderer;
-
-    std::unordered_map<uint16_t, std::wstring> _hyperlinkMap;
-    std::unordered_map<std::wstring, uint16_t> _hyperlinkCustomIdMap;
-    uint16_t _currentHyperlinkId;
-
-    void _RefreshRowIDs(std::optional<til::CoordType> newRowWidth);
+    void _reserve(til::size screenBufferSize, const TextAttribute& defaultAttributes);
+    void _commit(const std::byte* row);
+    void _decommit() noexcept;
+    void _construct(const std::byte* until) noexcept;
+    void _destroy() const noexcept;
+    ROW& _getRowByOffsetDirect(size_t offset);
+    til::CoordType _estimateOffsetOfLastCommittedRow() const noexcept;
 
     void _SetFirstRowIndex(const til::CoordType FirstRowIndex) noexcept;
-
-    til::point _GetPreviousFromCursor() const noexcept;
-
-    void _SetWrapOnCurrentRow() noexcept;
-    void _AdjustWrapOnCurrentRow(const bool fSet) noexcept;
-
+    til::point _GetPreviousFromCursor() const;
+    void _SetWrapOnCurrentRow();
+    void _AdjustWrapOnCurrentRow(const bool fSet);
     // Assist with maintaining proper buffer state for Double Byte character sequences
-    bool _PrepareForDoubleByteSequence(const DbcsAttribute dbcsAttribute);
+    void _PrepareForDoubleByteSequence(const DbcsAttribute dbcsAttribute);
     bool _AssertValidDoubleByteSequence(const DbcsAttribute dbcsAttribute);
-
-    ROW& _GetFirstRow() noexcept;
-    ROW& _GetPrevRowNoWrap(const ROW& row);
-
     void _ExpandTextRow(til::inclusive_rect& selectionRow) const;
-
     DelimiterClass _GetDelimiterClassAt(const til::point pos, const std::wstring_view wordDelimiters) const;
     til::point _GetWordStartForAccessibility(const til::point target, const std::wstring_view wordDelimiters) const;
     til::point _GetWordStartForSelection(const til::point target, const std::wstring_view wordDelimiters) const;
     til::point _GetWordEndForAccessibility(const til::point target, const std::wstring_view wordDelimiters, const til::point limit) const;
     til::point _GetWordEndForSelection(const til::point target, const std::wstring_view wordDelimiters) const;
-
     void _PruneHyperlinks();
 
     static void _AppendRTFText(std::ostringstream& contentBuilder, const std::wstring_view& text);
 
+    Microsoft::Console::Render::Renderer& _renderer;
+
+    std::unordered_map<uint16_t, std::wstring> _hyperlinkMap;
+    std::unordered_map<std::wstring, uint16_t> _hyperlinkCustomIdMap;
+    uint16_t _currentHyperlinkId = 1;
+
     std::unordered_map<size_t, std::wstring> _idsAndPatterns;
-    size_t _currentPatternId;
+    size_t _currentPatternId = 0;
+
+    // This block describes the state of the underlying virtual memory buffer that holds all ROWs, text and attributes.
+    // Initially memory is only allocated with MEM_RESERVE to reduce the private working set of conhost.
+    // ROWs are laid out like this in memory:
+    //   ROW                <-- sizeof(ROW), stores
+    //   (padding)
+    //   ROW::_charsBuffer  <-- _width * sizeof(wchar_t)
+    //   (padding)
+    //   ROW::_charOffsets  <-- (_width + 1) * sizeof(uint16_t)
+    //   (padding)
+    //   ...
+    // Padding may exist for alignment purposes.
+    //
+    // The base (start) address of the memory arena.
+    wil::unique_virtualalloc_ptr<std::byte> _buffer;
+    // The past-the-end pointer of the memory arena.
+    std::byte* _bufferEnd = nullptr;
+    // The range between _buffer (inclusive) and _commitWatermark (exclusive) is the range of
+    // memory that has already been committed via MEM_COMMIT and contains ready-to-use ROWs.
+    //
+    // The problem is that calling VirtualAlloc(MEM_COMMIT) on each ROW one by one is extremely expensive, which forces
+    // us to commit ROWs in batches and avoid calling it on already committed ROWs. Let's say we commit memory in
+    // batches of 128 ROWs. One option to know whether a ROW has already been committed is to allocate a vector<uint8_t>
+    // of size `(height + 127) / 128` and mark the corresponding slot as 1 if that 128-sized batch has been committed.
+    // That way we know not to commit it again. But ROWs aren't accessed randomly. Instead, they're usually accessed
+    // fairly linearly from row 1 to N. As such we can just commit ROWs up to the point of the highest accessed ROW
+    // plus some read-ahead of 128 ROWs. This is exactly what _commitWatermark stores: The highest accessed ROW plus
+    // some read-ahead. It's the amount of memory that has been committed and is ready to use.
+    //
+    // _commitWatermark will always be a multiple of _bufferRowStride away from _buffer.
+    // In other words, _commitWatermark itself will either point exactly onto the next ROW
+    // that should be committed or be equal to _bufferEnd when all ROWs are committed.
+    std::byte* _commitWatermark = nullptr;
+    // This will MEM_COMMIT 128 rows more than we need, to avoid us from having to call VirtualAlloc too often.
+    // This equates to roughly the following commit chunk sizes at these column counts:
+    // *  80 columns (the usual minimum) =  60KB chunks,  4.1MB buffer at 9001 rows
+    // * 120 columns (the most common)   =  80KB chunks,  5.6MB buffer at 9001 rows
+    // * 400 columns (the usual maximum) = 220KB chunks, 15.5MB buffer at 9001 rows
+    // There's probably a better metric than this. (This comment was written when ROW had both,
+    // a _chars array containing text and a _charOffsets array contain column-to-text indices.)
+    static constexpr size_t _commitReadAheadRowCount = 128;
+    // Before TextBuffer was made to use virtual memory it initialized the entire memory arena with the initial
+    // attributes right away. To ensure it continues to work the way it used to, this stores these initial attributes.
+    TextAttribute _initialAttributes;
+    // ROW ---------------+--+--+
+    // (padding)          |  |  v _bufferOffsetChars
+    // ROW::_charsBuffer  |  |
+    // (padding)          |  v _bufferOffsetCharOffsets
+    // ROW::_charOffsets  |
+    // (padding)          v _bufferRowStride
+    size_t _bufferRowStride = 0;
+    size_t _bufferOffsetChars = 0;
+    size_t _bufferOffsetCharOffsets = 0;
+    // The width of the buffer in columns.
+    uint16_t _width = 0;
+    // The height of the buffer in rows, excluding the scratchpad row.
+    uint16_t _height = 0;
+
+    TextAttribute _currentAttributes;
+    til::CoordType _firstRow = 0; // indexes top row (not necessarily 0)
+
+    Cursor _cursor;
+
+    bool _isActiveBuffer = false;
 
 #ifdef UNIT_TESTING
     friend class TextBufferTests;

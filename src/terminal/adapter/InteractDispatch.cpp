@@ -147,9 +147,9 @@ bool InteractDispatch::MoveCursor(const VTInt row, const VTInt col)
 
     // In VT, the origin is 1,1. For our array, it's 0,0. So subtract 1.
     // Apply boundary tests to ensure the cursor isn't outside the viewport rectangle.
-    til::point coordCursor{ col - 1 + viewport.Left, row - 1 + viewport.Top };
-    coordCursor.Y = std::clamp(coordCursor.Y, viewport.Top, viewport.Bottom);
-    coordCursor.X = std::clamp(coordCursor.X, viewport.Left, viewport.Right);
+    til::point coordCursor{ col - 1 + viewport.left, row - 1 + viewport.top };
+    coordCursor.y = std::clamp(coordCursor.y, viewport.top, viewport.bottom);
+    coordCursor.x = std::clamp(coordCursor.x, viewport.left, viewport.right);
 
     // Finally, attempt to set the adjusted cursor position back into the console.
     const auto api = gsl::not_null{ ServiceLocator::LocateGlobals().api };
@@ -240,7 +240,7 @@ bool InteractDispatch::FocusChanged(const bool focused) const
 
         WI_UpdateFlag(gci.Flags, CONSOLE_HAS_FOCUS, shouldActuallyFocus);
         gci.ProcessHandleList.ModifyConsoleProcessFocus(shouldActuallyFocus);
-        gci.pInputBuffer->Write(std::make_unique<FocusEvent>(focused));
+        gci.pInputBuffer->WriteFocusEvent(focused);
     }
     // Does nothing outside of ConPTY. If there's a real HWND, then the HWND is solely in charge.
 

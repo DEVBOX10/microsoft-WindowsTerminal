@@ -10,10 +10,12 @@
 
 namespace winrt::Microsoft::Terminal::Settings::Editor::implementation
 {
-    ColorSchemeViewModel::ColorSchemeViewModel(const Model::ColorScheme scheme) :
+    ColorSchemeViewModel::ColorSchemeViewModel(const Model::ColorScheme scheme, const Editor::ColorSchemesPageViewModel parentPageVM, const Model::CascadiaSettings& settings) :
         _scheme{ scheme },
+        _settings{ settings },
         _NonBrightColorTable{ single_threaded_observable_vector<Editor::ColorTableEntry>() },
-        _BrightColorTable{ single_threaded_observable_vector<Editor::ColorTableEntry>() }
+        _BrightColorTable{ single_threaded_observable_vector<Editor::ColorTableEntry>() },
+        _parentPageVM{ parentPageVM }
     {
         _Name = scheme.Name();
 
@@ -46,6 +48,39 @@ namespace winrt::Microsoft::Terminal::Settings::Editor::implementation
     winrt::hstring ColorSchemeViewModel::Name()
     {
         return _Name;
+    }
+
+    // This is used in the ComboBox and ListView.
+    // It's the only way to expose the name of the inner UI item so the ComboBox can do quick search
+    //  and screen readers can read the item out loud.
+    winrt::hstring ColorSchemeViewModel::ToString()
+    {
+        if (IsDefaultScheme())
+        {
+            return hstring{ fmt::format(L"{0} ({1})", Name(), RS_(L"ColorScheme_DefaultTag/Text")) };
+        }
+        return Name();
+    }
+
+    bool ColorSchemeViewModel::IsDefaultScheme()
+    {
+        const auto defaultAppearance = _settings.ProfileDefaults().DefaultAppearance();
+        return defaultAppearance.LightColorSchemeName() == defaultAppearance.DarkColorSchemeName() &&
+               _Name == defaultAppearance.LightColorSchemeName();
+    }
+
+    void ColorSchemeViewModel::RefreshIsDefault()
+    {
+        _NotifyChanges(L"IsDefaultScheme");
+    }
+
+    bool ColorSchemeViewModel::RequestRename(winrt::hstring newName)
+    {
+        if (const auto parentPageVM{ _parentPageVM.get() })
+        {
+            return parentPageVM.RequestRenameCurrentScheme(newName);
+        }
+        return false;
     }
 
     void ColorSchemeViewModel::Name(winrt::hstring newName)
@@ -88,6 +123,22 @@ namespace winrt::Microsoft::Terminal::Settings::Editor::implementation
                     }
                 }
             }
+        }
+    }
+
+    void ColorSchemeViewModel::DeleteConfirmation_Click(const IInspectable& /*sender*/, const Windows::UI::Xaml::RoutedEventArgs& /*e*/)
+    {
+        if (const auto parentPageVM{ _parentPageVM.get() })
+        {
+            return parentPageVM.RequestDeleteCurrentScheme();
+        }
+    }
+
+    void ColorSchemeViewModel::SetAsDefault_Click(const IInspectable& /*sender*/, const Windows::UI::Xaml::RoutedEventArgs& /*e*/)
+    {
+        if (const auto parentPageVM{ _parentPageVM.get() })
+        {
+            return parentPageVM.RequestSetSelectedSchemeAsDefault();
         }
     }
 

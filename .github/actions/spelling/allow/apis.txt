@@ -29,13 +29,13 @@ Dacl
 dataobject
 dcomp
 DERR
+delayimp
 dlldata
 DNE
 DONTADDTORECENT
-DWMWA
-DWORDLONG
 DWMSBT
 DWMWA
+DWORDLONG
 endfor
 ENDSESSION
 enumset
@@ -55,6 +55,8 @@ GETMOUSEHOVERTIME
 Hashtable
 HIGHCONTRASTON
 HIGHCONTRASTW
+hinternet
+HINTERNET
 hotkeys
 href
 hrgn
@@ -74,6 +76,7 @@ IConnection
 ICustom
 IDialog
 IDirect
+Idn
 IExplorer
 IFACEMETHOD
 IFile
@@ -85,6 +88,7 @@ IObject
 iosfwd
 IPackage
 IPeasant
+isa
 ISetup
 isspace
 IStorage
@@ -92,6 +96,7 @@ istream
 IStringable
 ITab
 ITaskbar
+itow
 IUri
 IVirtual
 KEYSELECT
@@ -109,8 +114,8 @@ memchr
 memicmp
 MENUCOMMAND
 MENUDATA
-MENUITEMINFOW
 MENUINFO
+MENUITEMINFOW
 mmeapi
 MOUSELEAVE
 mov
@@ -157,11 +162,13 @@ rcx
 REGCLS
 RETURNCMD
 rfind
-roundf
+RLO
 ROOTOWNER
+roundf
 RSHIFT
 SACL
 schandle
+SEH
 semver
 serializer
 SETVERSION
@@ -209,9 +216,14 @@ UOI
 UPDATEINIFILE
 userenv
 USEROBJECTFLAGS
+Vcpp
 Viewbox
+virtualalloc
+vsnwprintf
 wcsstr
 wcstoui
+WDJ
+winhttp
 winmain
 winsta
 winstamin
@@ -219,6 +231,7 @@ wmemcmp
 wpc
 WSF
 wsregex
+WWH
 wwinmain
 xchg
 XDocument
@@ -244,3 +257,4 @@ xtree
 xutility
 YIcon
 YMax
+zwstring
