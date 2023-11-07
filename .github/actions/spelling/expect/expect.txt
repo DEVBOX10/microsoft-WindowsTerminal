@@ -7,7 +7,6 @@ ABCF
 abgr
 abi
 ABORTIFHUNG
-ACCESSTOKEN
 acidev
 ACIOSS
 ACover
@@ -18,7 +17,6 @@ ADDALIAS
 ADDREF
 ADDSTRING
 ADDTOOL
-AEnd
 AFew
 AFill
 AFX
@@ -105,6 +103,7 @@ bcx
 bcz
 BEFOREPARENT
 beginthread
+benchcat
 bgfx
 bgidx
 Bgk
@@ -116,10 +115,8 @@ binplace
 binplaced
 bitcoin
 bitcrazed
-bitflag
 bitmask
 BITOPERATION
-bitsets
 BKCOLOR
 BKGND
 Bksp
@@ -148,12 +145,12 @@ bufferout
 buffersize
 buflen
 buildtransitive
-BUILDURI
 burriter
 BValue
 bytebuffer
 cac
 cacafire
+CALLCONV
 capslock
 CARETBLINKINGENABLED
 CARRIAGERETURN
@@ -191,13 +188,14 @@ changelist
 chaof
 charinfo
 CHARSETINFO
+chcbpat
 chh
 chk
+chshdng
 CHT
 Cic
 cielab
 Cielab
-Clcompile
 CLE
 cleartype
 CLICKACTIVE
@@ -228,7 +226,6 @@ codepage
 codepath
 codepoints
 coinit
-COLLECTIONURI
 colorizing
 COLORMATRIX
 COLORREFs
@@ -380,7 +377,6 @@ dai
 DATABLOCK
 DBatch
 dbcs
-DBCSCHAR
 DBCSFONT
 dbg
 DBGALL
@@ -502,7 +498,6 @@ devicecode
 Dext
 DFactory
 DFF
-dhandler
 dialogbox
 directio
 DIRECTX
@@ -520,7 +515,6 @@ dllmain
 DLLVERSIONINFO
 DLOAD
 DLOOK
-dmp
 DONTCARE
 doskey
 dotnet
@@ -598,7 +592,6 @@ eplace
 EPres
 EQU
 ERASEBKGND
-etcoreapp
 ETW
 EUDC
 EVENTID
@@ -640,7 +633,6 @@ FGs
 FILEDESCRIPTION
 FILESUBTYPE
 FILESYSPATH
-fileurl
 FILEW
 FILLATTR
 FILLCONSOLEOUTPUT
@@ -689,7 +681,7 @@ FSINFOCLASS
 fte
 Ftm
 Fullscreens
-fullwidth
+Fullwidth
 FUNCTIONCALL
 fuzzer
 fuzzmain
@@ -760,7 +752,6 @@ gfx
 GGI
 GHIJK
 GHIJKL
-GHIJKLM
 gitfilters
 gitmodules
 gle
@@ -822,7 +813,6 @@ HIWORD
 HKCU
 hkey
 hkl
-HKLM
 hlocal
 hlsl
 HMB
@@ -830,7 +820,6 @@ HMK
 hmod
 hmodule
 hmon
-homeglyphs
 homoglyph
 HORZ
 hostable
@@ -918,6 +907,7 @@ INSERTMODE
 INTERACTIVITYBASE
 INTERCEPTCOPYPASTE
 INTERNALNAME
+Interner
 intsafe
 INVALIDARG
 INVALIDATERECT
@@ -934,12 +924,10 @@ itermcolors
 ITerminal
 itf
 Ith
-itoa
 IUI
 IUnknown
 ivalid
 IWIC
-IXMP
 IXP
 jconcpp
 JOBOBJECT
@@ -963,7 +951,6 @@ kernelbasestaging
 KEYBDINPUT
 keychord
 keydown
-keyevent
 KEYFIRST
 KEYLAST
 Keymapping
@@ -987,7 +974,6 @@ langid
 LANGUAGELIST
 lasterror
 LASTEXITCODE
-lastexitcode
 LAYOUTRTL
 lbl
 LBN
@@ -1011,13 +997,11 @@ LINEWRAP
 LINKERRCAP
 LINKERROR
 linputfile
-listproperties
 listptr
 listptrsize
 lld
 llx
 LMENU
-LMNOP
 lnk
 lnkd
 lnkfile
@@ -1031,6 +1015,7 @@ LOGFONT
 LOGFONTA
 LOGFONTW
 logissue
+losslessly
 loword
 lparam
 LPCCH
@@ -1116,6 +1101,7 @@ MDs
 MEASUREITEM
 megamix
 memallocator
+meme
 MENUCHAR
 MENUCONTROL
 MENUDROPALIGNMENT
@@ -1129,7 +1115,6 @@ MIIM
 milli
 mincore
 mindbogglingly
-minimizeall
 minkernel
 MINMAXINFO
 minwin
@@ -1239,7 +1224,6 @@ nonspace
 NOOWNERZORDER
 Nop
 NOPAINT
-NOPQRST
 noprofile
 NOREDRAW
 NOREMOVE
@@ -1316,7 +1300,7 @@ onecoreuuid
 ONECOREWINDOWS
 onehalf
 oneseq
-ONLCR
+OOM
 openbash
 opencode
 opencon
@@ -1326,13 +1310,6 @@ openps
 openvt
 ORIGINALFILENAME
 osc
-OSCBG
-OSCCT
-OSCFG
-OSCRCC
-OSCSCB
-OSCSCC
-OSCWT
 OSDEPENDSROOT
 OSG
 OSGENG
@@ -1464,8 +1441,8 @@ prc
 prealigned
 prect
 prefast
+preflighting
 prefs
-preinstalled
 prepopulated
 presorted
 PREVENTPINNING
@@ -1478,7 +1455,6 @@ prioritization
 processenv
 processhost
 PROCESSINFOCLASS
-procs
 PROPERTYID
 PROPERTYKEY
 PROPERTYVAL
@@ -1493,7 +1469,6 @@ propvariant
 propvarutil
 psa
 PSECURITY
-pseudocode
 pseudoconsole
 pseudoterminal
 psh
@@ -1523,7 +1498,6 @@ pwsz
 pythonw
 Qaabbcc
 qos
-QRSTU
 QUERYOPEN
 QUESTIONMARK
 quickedit
@@ -1612,12 +1586,10 @@ rgrc
 rgs
 rgui
 rgw
-rgwch
 RIGHTALIGN
 RIGHTBUTTON
 riid
 Rike
-RIPMSG
 RIS
 roadmap
 robomac
@@ -1773,7 +1745,6 @@ SND
 SOLIDBOX
 Solutiondir
 somefile
-SOURCEBRANCH
 sourced
 spammy
 SRCCODEPAGE
@@ -1804,11 +1775,11 @@ stdafx
 STDAPI
 stdc
 stdcpp
+STDEXT
 STDMETHODCALLTYPE
 STDMETHODIMP
 STGM
 stl
-stoutapot
 Stri
 Stringable
 STRINGTABLE
@@ -1825,7 +1796,6 @@ SUBLANG
 subresource
 subsystemconsole
 subsystemwindows
-suiteless
 swapchain
 swapchainpanel
 swappable
@@ -1864,13 +1834,11 @@ TBM
 tchar
 TCHFORMAT
 TCI
-tcome
 tcommandline
 tcommands
 Tdd
 TDelegated
 TDP
-TEAMPROJECT
 tearoff
 Teb
 Techo
@@ -1882,23 +1850,16 @@ terminalrenderdata
 TERMINALSCROLLING
 terminfo
 TEs
-testbuildplatform
 testcon
 testd
-testdlls
 testenv
 testlab
 testlist
 testmd
-testmode
 testname
-testnameprefix
 TESTNULL
 testpass
 testpasses
-testtestabc
-testtesttesttesttest
-testtimeout
 TEXCOORD
 texel
 TExpected
@@ -1926,7 +1887,6 @@ TJson
 TLambda
 TLDP
 TLEN
-Tlgdata
 TMAE
 TMPF
 TMult
@@ -1946,6 +1906,7 @@ touchpad
 Tpp
 Tpqrst
 tprivapi
+tput
 tracelog
 tracelogging
 traceloggingprovider
@@ -1986,11 +1947,14 @@ UAC
 uap
 uapadmin
 UAX
+UBool
 ucd
 uch
+UChars
 udk
 UDM
 uer
+UError
 uget
 uia
 UIACCESS
@@ -2020,13 +1984,14 @@ unknwn
 UNORM
 unparseable
 unregistering
-untests
 untextured
 untimes
 UPDATEDISPLAY
 UPDOWN
 UPKEY
 UPSS
+uregex
+URegular
 usebackq
 USECALLBACK
 USECOLOR
@@ -2048,8 +2013,10 @@ USESIZE
 USESTDHANDLES
 usp
 USRDLL
+utext
+UText
+UTEXT
 utr
-UVWX
 UVWXY
 UVWXYZ
 uwa
@@ -2108,8 +2075,6 @@ VTRGBTo
 vtseq
 vtterm
 vttest
-VWX
-waaay
 waitable
 WANSUNG
 WANTARROWS
@@ -2158,7 +2123,6 @@ windbg
 WINDEF
 windll
 WINDOWALPHA
-Windowbuffer
 windowdpiapi
 WINDOWEDGE
 windowext
@@ -2228,7 +2192,6 @@ wprp
 wprpi
 wregex
 writeback
-writechar
 WRITECONSOLE
 WRITECONSOLEINPUT
 WRITECONSOLEOUTPUT
@@ -2302,12 +2265,12 @@ xunit
 xutr
 XVIRTUALSCREEN
 XWalk
-xxyyzz
 yact
 YCast
 YCENTER
 YCount
 YDPI
+YLimit
 YOffset
 YSubstantial
 YVIRTUALSCREEN

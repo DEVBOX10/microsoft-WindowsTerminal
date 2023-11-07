@@ -85,6 +85,41 @@
         }
       ]
     },
+    "BuiltinSuggestionSource": {
+      "type": "string",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "enum": [
+            "commandHistory",
+            "tasks",
+            "all"
+          ]
+        }
+      ]
+    },
+    "SuggestionSource": {
+      "default": "all",
+      "description": "Either a single suggestion source, or an array of sources to concatenate. Built-in sources include `commandHistory`, `directoryHistory`, and `tasks`. The special value `all` indicates all suggestion sources should be included",
+      "$comment": "`tasks` and `local` are sources that would be added by the Tasks feature, as a follow-up",
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/BuiltinSuggestionSource"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/BuiltinSuggestionSource"
+          },
+          "uniqueItems": true
+        }
+      ]
+    },
     "AppearanceConfig": {
       "properties": {
         "colorScheme": {
@@ -175,10 +210,6 @@
                 "desktopWallpaper"
               ]
             }
-          ],
-          "type": [
-            "string",
-            "null"
           ]
         },
         "backgroundImageOpacity": {
@@ -243,6 +274,17 @@
         "experimental.pixelShaderPath": {
           "description": "Use to set a path to a pixel shader to use with the Terminal when unfocused. Overrides `experimental.retroTerminalEffect`. This is an experimental feature, and its continued existence is not guaranteed.",
           "type": "string"
+        },
+        "useAcrylic": {
+          "description": "When set to true, the window will have an acrylic material background when unfocused. When set to false, the window will have a plain, untextured background when unfocused.",
+          "type": "boolean"
+        },
+        "opacity": {
+          "default": 100,
+          "description": "Sets the opacity of the window for the profile when unfocused. Accepts values from 0-100.",
+          "maximum": 100,
+          "minimum": 0,
+          "type": "number"
         }
       },
       "type": "object"
@@ -260,7 +302,8 @@
           "description": "Name of the scheme to use when the app is using dark theme",
           "type": "string"
         }
-      }
+      },
+      "type": "object"
     },
     "FontConfig": {
       "properties": {
@@ -347,8 +390,12 @@
     },
     "ShortcutActionName": {
       "enum": [
+        "addMark",
         "adjustFontSize",
+        "adjustOpacity",
+        "clearAllMarks",
         "clearBuffer",
+        "clearMark",
         "closeOtherPanes",
         "closeOtherTabs",
         "closePane",
@@ -359,6 +406,7 @@
         "copy",
         "duplicateTab",
         "expandSelectionToWord",
+        "experimental.colorSelection",
         "exportBuffer",
         "find",
         "findMatch",
@@ -366,63 +414,60 @@
         "globalSummon",
         "identifyWindow",
         "identifyWindows",
+        "markMode",
         "moveFocus",
         "movePane",
-        "swapPane",
-        "markMode",
         "moveTab",
         "multipleActions",
         "newTab",
         "newWindow",
         "nextTab",
+        "openAbout",
         "openNewTabDropdown",
         "openSettings",
+        "openSystemMenu",
         "openTabColorPicker",
+        "openTabRenamer",
         "openWindowRenamer",
         "paste",
         "prevTab",
-        "renameTab",
-        "openSystemMenu",
-        "openTabRenamer",
         "quakeMode",
+        "quit",
+        "renameTab",
+        "renameWindow",
         "resetFontSize",
         "resizePane",
-        "renameWindow",
+        "restoreLastClosed",
         "scrollDown",
         "scrollDownPage",
+        "scrollToBottom",
+        "scrollToMark",
+        "scrollToTop",
         "scrollUp",
         "scrollUpPage",
-        "scrollToBottom",
-        "scrollToTop",
+        "searchWeb",
+        "selectAll",
         "sendInput",
         "setColorScheme",
+        "setFocusMode",
+        "setFullScreen",
+        "setMaximized",
         "setTabColor",
+        "showSuggestions",
         "splitPane",
+        "swapPane",
+        "switchSelectionEndpoint",
         "switchToTab",
         "tabSearch",
         "toggleAlwaysOnTop",
         "toggleBlockSelection",
         "toggleFocusMode",
-        "selectAll",
-        "setFocusMode",
-        "switchSelectionEndpoint",
         "toggleFullscreen",
-        "setFullScreen",
-        "setMaximized",
         "togglePaneZoom",
-        "toggleSplitOrientation",
         "toggleReadOnlyMode",
         "toggleShaderEffects",
+        "toggleSplitOrientation",
         "wt",
-        "quit",
-        "adjustOpacity",
-        "restoreLastClosed",
-        "addMark",
-        "scrollToMark",
-        "clearMark",
-        "clearAllMarks",
-        "searchWeb",
-        "experimental.colorSelection",
         "unbound"
       ],
       "type": "string"
@@ -612,6 +657,7 @@
           "$ref": "#/$defs/NewTabMenuEntry"
         },
         {
+          "type": "object",
           "properties": {
             "type": {
               "type": "string",
@@ -640,7 +686,7 @@
             },
             "allowEmpty": {
               "description": "Whether to render a folder without entries, or to hide it",
-              "default": "false",
+              "default": false,
               "type": "boolean"
             }
           }
@@ -654,6 +700,7 @@
           "$ref": "#/$defs/NewTabMenuEntry"
         },
         {
+          "type": "object",
           "properties": {
             "type": {
               "type": "string",
@@ -670,6 +717,7 @@
           "$ref": "#/$defs/NewTabMenuEntry"
         },
         {
+          "type": "object",
           "properties": {
             "type": {
               "type": "string",
@@ -691,6 +739,7 @@
           "$ref": "#/$defs/NewTabMenuEntry"
         },
         {
+          "type": "object",
           "properties": {
             "type": {
               "type": "string",
@@ -707,6 +756,7 @@
           "$ref": "#/$defs/NewTabMenuEntry"
         },
         {
+          "type": "object",
           "properties": {
             "type": {
               "type": "string",
@@ -747,6 +797,7 @@
       ]
     },
     "ShortcutAction": {
+      "type": "object",
       "properties": {
         "action": {
           "description": "The action to execute",
@@ -755,8 +806,7 @@
       },
       "required": [
         "action"
-      ],
-      "type": "object"
+      ]
     },
     "AdjustFontSizeAction": {
       "description": "Arguments corresponding to an Adjust Font Size Action",
@@ -765,6 +815,7 @@
           "$ref": "#/$defs/ShortcutAction"
         },
         {
+          "type": "object",
           "properties": {
             "action": {
               "type": "string",
@@ -789,6 +840,7 @@
           "$ref": "#/$defs/ShortcutAction"
         },
         {
+          "type": "object",
           "properties": {
             "action": {
               "type": "string",
@@ -798,6 +850,11 @@
               "type": "boolean",
               "default": false,
               "description": "If true, the copied content will be copied as a single line (even if there are hard line breaks present in the text). If false, newlines persist from the selected text."
+            },
+            "dismissSelection": {
+              "type": "boolean",
+              "default": true,
+              "description": "If false, the copied content will be copied and the selection will not be dismissed. If true, the selection will be dismissed."
             },
             "copyFormatting": {
               "default": null,
@@ -825,6 +882,7 @@
           "$ref": "#/$defs/NewTerminalArgs"
         },
         {
+          "type": "object",
           "properties": {
             "action": {
               "type": "string",
@@ -841,6 +899,7 @@
           "$ref": "#/$defs/ShortcutAction"
         },
         {
+          "type": "object",
           "properties": {
             "action": {
               "type": "string",
@@ -865,6 +924,7 @@
           "$ref": "#/$defs/ShortcutAction"
         },
         {
+          "type": "object",
           "properties": {
             "action": {
               "type": "string",
@@ -889,6 +949,7 @@
           "$ref": "#/$defs/ShortcutAction"
         },
         {
+          "type": "object",
           "properties": {
             "action": {
               "type": "string",
@@ -913,6 +974,7 @@
           "$ref": "#/$defs/ShortcutAction"
         },
         {
+          "type": "object",
           "properties": {
             "action": {
               "type": "string",
@@ -937,6 +999,7 @@
           "$ref": "#/$defs/ShortcutAction"
         },
         {
+          "type": "object",
           "properties": {
             "action": {
               "type": "string",
@@ -961,6 +1024,7 @@
           "$ref": "#/$defs/ShortcutAction"
         },
         {
+          "type": "object",
           "properties": {
             "action": {
               "type": "string",
@@ -985,6 +1049,7 @@
           "$ref": "#/$defs/ShortcutAction"
         },
         {
+          "type": "object",
           "properties": {
             "action": {
               "type": "string",
@@ -1012,6 +1077,7 @@
           "$ref": "#/$defs/NewTerminalArgs"
         },
         {
+          "type": "object",
           "properties": {
             "action": {
               "type": "string",
@@ -1044,6 +1110,7 @@
           "$ref": "#/$defs/ShortcutAction"
         },
         {
+          "type": "object",
           "properties": {
             "action": {
               "type": "string",
@@ -1081,6 +1148,7 @@
           "$ref": "#/$defs/ShortcutAction"
         },
         {
+          "type": "object",
           "properties": {
             "action": {
               "type": "string",
@@ -1108,6 +1176,7 @@
           "$ref": "#/$defs/ShortcutAction"
         },
         {
+          "type": "object",
           "properties": {
             "action": {
               "type": "string",
@@ -1129,6 +1198,7 @@
           "$ref": "#/$defs/ShortcutAction"
         },
         {
+          "type": "object",
           "properties": {
             "action": {
               "type": "string",
@@ -1150,6 +1220,7 @@
           "$ref": "#/$defs/ShortcutAction"
         },
         {
+          "type": "object",
           "properties": {
             "action": {
               "type": "string",
@@ -1174,6 +1245,7 @@
           "$ref": "#/$defs/ShortcutAction"
         },
         {
+          "type": "object",
           "properties": {
             "action": {
               "type": "string",
@@ -1194,6 +1266,7 @@
           "$ref": "#/$defs/ShortcutAction"
         },
         {
+          "type": "object",
           "properties": {
             "action": {
               "type": "string",
@@ -1214,6 +1287,7 @@
           "$ref": "#/$defs/ShortcutAction"
         },
         {
+          "type": "object",
           "properties": {
             "action": {
               "type": "string",
@@ -1234,6 +1308,7 @@
           "$ref": "#/$defs/ShortcutAction"
         },
         {
+          "type": "object",
           "properties": {
             "action": {
               "type": "string",
@@ -1258,6 +1333,7 @@
           "$ref": "#/$defs/ShortcutAction"
         },
         {
+          "type": "object",
           "properties": {
             "action": {
               "type": "string",
@@ -1286,6 +1362,7 @@
           "$ref": "#/$defs/ShortcutAction"
         },
         {
+          "type": "object",
           "properties": {
             "action": {
               "type": "string",
@@ -1314,6 +1391,7 @@
           "$ref": "#/$defs/ShortcutAction"
         },
         {
+          "type": "object",
           "properties": {
             "action": {
               "type": "string",
@@ -1342,6 +1420,7 @@
           "$ref": "#/$defs/ShortcutAction"
         },
         {
+          "type": "object",
           "properties": {
             "action": {
               "type": "string",
@@ -1366,6 +1445,7 @@
           "$ref": "#/$defs/ShortcutAction"
         },
         {
+          "type": "object",
           "properties": {
             "action": {
               "type": "string",
@@ -1390,6 +1470,7 @@
           "$ref": "#/$defs/ShortcutAction"
         },
         {
+          "type": "object",
           "properties": {
             "action": {
               "type": "string",
@@ -1413,6 +1494,7 @@
           "$ref": "#/$defs/ShortcutAction"
         },
         {
+          "type": "object",
           "properties": {
             "action": {
               "type": "string",
@@ -1438,6 +1520,7 @@
           "$ref": "#/$defs/ShortcutAction"
         },
         {
+          "type": "object",
           "properties": {
             "action": {
               "type": "string",
@@ -1459,6 +1542,7 @@
           "$ref": "#/$defs/ShortcutAction"
         },
         {
+          "type": "object",
           "properties": {
             "action": {
               "type": "string",
@@ -1486,6 +1570,7 @@
           "$ref": "#/$defs/NewTerminalArgs"
         },
         {
+          "type": "object",
           "properties": {
             "action": {
               "type": "string",
@@ -1502,6 +1587,7 @@
           "$ref": "#/$defs/ShortcutAction"
         },
         {
+          "type": "object",
           "properties": {
             "action": {
               "type": "string",
@@ -1523,6 +1609,7 @@
           "$ref": "#/$defs/ShortcutAction"
         },
         {
+          "type": "object",
           "properties": {
             "action": {
               "type": "string",
@@ -1544,6 +1631,7 @@
           "$ref": "#/$defs/ShortcutAction"
         },
         {
+          "type": "object",
           "properties": {
             "action": {
               "type": "string",
@@ -1565,6 +1653,7 @@
           "$ref": "#/$defs/ShortcutAction"
         },
         {
+          "type": "object",
           "properties": {
             "action": {
               "type": "string",
@@ -1586,6 +1675,7 @@
           "$ref": "#/$defs/ShortcutAction"
         },
         {
+          "type": "object",
           "properties": {
             "action": {
               "type": "string",
@@ -1608,6 +1698,7 @@
           "$ref": "#/$defs/ShortcutAction"
         },
         {
+          "type": "object",
           "properties": {
             "action": {
               "type": "string",
@@ -1629,6 +1720,7 @@
           "$ref": "#/$defs/ShortcutAction"
         },
         {
+          "type": "object",
           "properties": {
             "action": {
               "type": "string",
@@ -1650,6 +1742,7 @@
           "$ref": "#/$defs/ShortcutAction"
         },
         {
+          "type": "object",
           "properties": {
             "action": {
               "type": "string",
@@ -1701,6 +1794,7 @@
           "$ref": "#/$defs/ShortcutAction"
         },
         {
+          "type": "object",
           "properties": {
             "action": {
               "type": "string",
@@ -1717,6 +1811,7 @@
           "$ref": "#/$defs/ShortcutAction"
         },
         {
+          "type": "object",
           "properties": {
             "action": {
               "type": "string",
@@ -1740,6 +1835,7 @@
           "$ref": "#/$defs/ShortcutAction"
         },
         {
+          "type": "object",
           "properties": {
             "action": {
               "type": "string",
@@ -1756,6 +1852,31 @@
               "type": "boolean",
               "default": true,
               "description": "If true, then adjust the current opacity by the given `opacity` parameter, additively. If false, set the opacity to exactly that value."
+            }
+          }
+        }
+      ]
+    },
+    "ShowSuggestionsAction": {
+      "description": "Arguments corresponding to a Open Suggestions Action",
+      "allOf": [
+        {
+          "$ref": "#/$defs/ShortcutAction"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "const": "showSuggestions"
+            },
+            "source": {
+              "$ref": "#/$defs/SuggestionSource",
+              "description": "Which suggestion sources to filter."
+            },
+            "useCommandline": {
+              "default": false,
+              "description": "When set to `true`, the current commandline the user has typed will pre-populate the filter of the Suggestions UI. This requires that the user has enabled shell integration in their shell's config. When set to false, the filter will start empty."
             }
           }
         }
@@ -1830,7 +1951,11 @@
       "properties": {
         "applicationTheme": {
           "description": "Which UI theme the Terminal should use for controls",
-          "enum": [ "light", "dark", "system" ],
+          "enum": [
+            "light",
+            "dark",
+            "system"
+          ],
           "type": "string"
         },
         "useMica": {
@@ -1861,7 +1986,11 @@
           "type": "string",
           "description": "The name of the theme. This will be displayed in the settings UI.",
           "not": {
-            "enum": [ "light", "dark", "system" ]
+            "enum": [
+              "light",
+              "dark",
+              "system"
+            ]
           }
         },
         "tab": {
@@ -1878,6 +2007,7 @@
     "ThemePair": {
       "additionalProperties": false,
       "description": "A pair of Theme names, to allow the Terminal to switch theme based on the OS theme",
+      "type": "object",
       "properties": {
         "light": {
           "type": "string",
@@ -2032,6 +2162,9 @@
               "$ref": "#/$defs/SearchWebAction"
             },
             {
+              "$ref": "#/$defs/ShowSuggestionsAction"
+            },
+            {
               "type": "null"
             }
           ]
@@ -2056,16 +2189,16 @@
         },
         "name": {
           "description": "The name that will appear in the command palette. If one isn't provided, the terminal will attempt to automatically generate a name.\nIf name is a string, it will be the name of the command.\nIf name is a object, the key property of the object will be used to lookup a localized string resource for the command",
-          "properties": {
-            "key": {
-              "type": "string"
-            }
-          },
           "type": [
             "string",
             "object",
             "null"
-          ]
+          ],
+          "properties": {
+            "key": {
+              "type": "string"
+            }
+          }
         },
         "iterateOn": {
           "type": "string",
@@ -2102,6 +2235,7 @@
     "Globals": {
       "additionalProperties": true,
       "description": "Properties that affect the entire window, regardless of the profile settings.",
+      "type": "object",
       "properties": {
         "alwaysOnTop": {
           "default": false,
@@ -2111,6 +2245,11 @@
         "alwaysShowTabs": {
           "default": true,
           "description": "When set to true, tabs are always displayed. When set to false and \"showTabsInTitlebar\" is set to false, tabs only appear after opening a new tab.",
+          "type": "boolean"
+        },
+        "compatibility.enableUnfocusedAcrylic": {
+          "default": true,
+          "description": "When set to true, unfocused windows can have acrylic instead of opaque.",
           "type": "boolean"
         },
         "centerOnLaunch": {
@@ -2208,11 +2347,6 @@
         "experimental.useBackgroundImageForWindow": {
           "default": false,
           "description": "When set to true, the background image for the currently focused profile is expanded to encompass the entire window, beneath other panes.",
-          "type": "boolean"
-        },
-        "compatibility.reloadEnvironmentVariables": {
-          "default": true,
-          "description": "When set to true, when opening a new tab or pane it will get reloaded environment variables.",
           "type": "boolean"
         },
         "initialCols": {
@@ -2316,9 +2450,16 @@
         "theme": {
           "default": "dark",
           "description": "Sets the theme of the application. This value should be the name of one of the themes defined in `themes`. The Terminal also includes the themes `dark`, `light`, and `system`.",
-          "oneOf": [
+          "anyOf": [
             {
               "type": "string"
+            },
+            {
+              "enum": [
+                "dark",
+                "light",
+                "system"
+              ]
             },
             {
               "$ref": "#/$defs/ThemePair"
@@ -2429,12 +2570,12 @@
       },
       "required": [
         "defaultProfile"
-      ],
-      "type": "object"
+      ]
     },
     "Profile": {
       "description": "Properties specific to a unique profile.",
       "additionalProperties": false,
+      "type": "object",
       "properties": {
         "acrylicOpacity": {
           "default": 0.5,
@@ -2463,6 +2604,11 @@
             "null"
           ]
         },
+        "compatibility.reloadEnvironmentVariables": {
+          "default": true,
+          "description": "When set to true, when opening a new tab or pane it will get reloaded environment variables.",
+          "type": "boolean"
+        },
         "unfocusedAppearance": {
           "$ref": "#/$defs/AppearanceConfig",
           "description": "Sets the appearance of the terminal when it is unfocused.",
@@ -2481,7 +2627,7 @@
         },
         "backgroundImage": {
           "description": "Sets the file location of the image to draw over the window background.",
-          "oneOf": [
+          "anyOf": [
             {
               "type": [
                 "string",
@@ -2493,10 +2639,6 @@
                 "desktopWallpaper"
               ]
             }
-          ],
-          "type": [
-            "string",
-            "null"
           ]
         },
         "backgroundImageAlignment": {
@@ -2833,8 +2975,7 @@
           "description": "When set to true, the window will have an acrylic material background. When set to false, the window will have a plain, untextured background.",
           "type": "boolean"
         }
-      },
-      "type": "object"
+      }
     },
     "ProfileList": {
       "description": "A list of profiles and the properties specific to each.",
@@ -2849,6 +2990,7 @@
     },
     "ProfilesObject": {
       "description": "A list of profiles and default settings that apply to all of them",
+      "type": "object",
       "properties": {
         "list": {
           "$ref": "#/$defs/ProfileList"
@@ -2857,12 +2999,12 @@
           "description": "The default settings that apply to every profile.",
           "$ref": "#/$defs/Profile"
         }
-      },
-      "type": "object"
+      }
     },
     "SchemeList": {
       "description": "Properties are specific to each color scheme. ColorTool is a great tool you can use to create and explore new color schemes. All colors use hex color format.",
       "items": {
+        "type": "object",
         "additionalProperties": false,
         "properties": {
           "name": {
@@ -2951,8 +3093,7 @@
             "$ref": "#/$defs/Color",
             "description": "Sets the color used as ANSI yellow."
           }
-        },
-        "type": "object"
+        }
       },
       "type": "array"
     }
@@ -2962,6 +3103,7 @@
       "$ref": "#/$defs/Globals"
     },
     {
+      "type": "object",
       "additionalItems": true,
       "properties": {
         "profiles": {
