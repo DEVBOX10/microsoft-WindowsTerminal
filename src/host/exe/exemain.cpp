@@ -175,7 +175,7 @@ static bool ShouldUseLegacyConhost(const ConsoleArguments& args)
     {
         // setup status error
         hr = HRESULT_FROM_WIN32(GetLastError());
-        // fallback to V2 if conhostv1.dll cannot be loaded.
+        // fall back to V2 if conhostv1.dll cannot be loaded.
         useV2 = true;
     }
 
@@ -222,6 +222,7 @@ int CALLBACK wWinMain(
     _In_ PWSTR /*pwszCmdLine*/,
     _In_ int /*nCmdShow*/)
 {
+    TraceLoggingRegister(g_hConhostV2EventTraceProvider);
     wil::SetResultLoggingCallback(&Tracing::TraceFailure);
     Microsoft::Console::Interactivity::ServiceLocator::LocateGlobals().hInstance = hInstance;
 
@@ -277,7 +278,7 @@ int CALLBACK wWinMain(
     {
         // Only try to register as a handoff target if we are NOT a part of Windows.
 #if TIL_FEATURE_RECEIVEINCOMINGHANDOFF_ENABLED
-        if (args.ShouldRunAsComServer() && Microsoft::Console::Internal::DefaultApp::CheckDefaultAppPolicy())
+        if (args.ShouldRunAsComServer())
         {
             try
             {

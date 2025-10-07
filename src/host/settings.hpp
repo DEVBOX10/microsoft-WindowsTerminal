@@ -24,11 +24,11 @@ constexpr unsigned short MIN_WINDOW_OPACITY = 0x4D; // 0x4D is approximately 30%
 #include "ConsoleArguments.hpp"
 #include "../renderer/inc/RenderSettings.hpp"
 
-enum class UseDx : DWORD
+enum class SettingsTextMeasurementMode : DWORD
 {
-    Disabled = 0,
-    DxEngine,
-    AtlasEngine,
+    Graphemes,
+    Wcswidth,
+    Console,
 };
 
 class Settings
@@ -172,12 +172,20 @@ public:
     void SetInterceptCopyPaste(const bool interceptCopyPaste) noexcept;
 
     void CalculateDefaultColorIndices() noexcept;
+    void SaveDefaultRenderSettings() noexcept;
 
     bool IsTerminalScrolling() const noexcept;
     void SetTerminalScrolling(const bool terminalScrollingEnabled) noexcept;
 
-    UseDx GetUseDx() const noexcept;
+    std::wstring_view GetAnswerbackMessage() const noexcept;
+
+    DWORD GetMSAADelay() const noexcept;
+    DWORD GetUIADelay() const noexcept;
+    bool GetUseDx() const noexcept;
     bool GetCopyColor() const noexcept;
+    SettingsTextMeasurementMode GetTextMeasurementMode() const noexcept;
+    void SetTextMeasurementMode(SettingsTextMeasurementMode mode) noexcept;
+    bool GetEnableBuiltinGlyphs() const noexcept;
 
 private:
     RenderSettings _renderSettings;
@@ -219,8 +227,12 @@ private:
     std::wstring _LaunchFaceName;
     bool _fAllowAltF4Close;
     DWORD _dwVirtTermLevel;
-    UseDx _fUseDx;
+    DWORD _msaaDelay = 100;
+    DWORD _uiaDelay = 25;
+    SettingsTextMeasurementMode _textMeasurement = SettingsTextMeasurementMode::Graphemes;
+    bool _fUseDx;
     bool _fCopyColor;
+    bool _fEnableBuiltinGlyphs = true;
 
     // this is used for the special STARTF_USESIZE mode.
     bool _fUseWindowSizePixels;
@@ -230,6 +242,7 @@ private:
 
     bool _fInterceptCopyPaste;
 
-    bool _TerminalScrolling;
+    bool _TerminalScrolling = true;
+    WCHAR _answerbackMessage[32] = {};
     friend class RegistrySerialization;
 };

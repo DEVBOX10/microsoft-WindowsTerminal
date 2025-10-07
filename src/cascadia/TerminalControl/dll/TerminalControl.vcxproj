@@ -21,6 +21,7 @@
          projects compile properly when they depend on this "Microsoft.winmd."
     -->
     <CppWinRTNamespaceMergeDepth>3</CppWinRTNamespaceMergeDepth>
+    <VersionInfoFileDescription>Windows Terminal Control Library</VersionInfoFileDescription>
   </PropertyGroup>
 
   <PropertyGroup Label="NuGet Dependencies">
@@ -65,6 +66,11 @@
       <Private>true</Private>
       <CopyLocalSatelliteAssemblies>true</CopyLocalSatelliteAssemblies>
     </ProjectReference>
+
+    <ProjectReference Include="$(OpenConsoleDir)src\cascadia\UIHelpers\UIHelpers.vcxproj">
+      <Project>{6515F03F-E56D-4DB4-B23D-AC4FB80DB36F}</Project>
+      <Private>false</Private>
+    </ProjectReference>
   </ItemGroup>
 
   <ItemGroup>
@@ -90,7 +96,7 @@
   <ItemDefinitionGroup>
     <Link>
       <AdditionalDependencies>delayimp.lib;Uiautomationcore.lib;onecoreuap.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <DelayLoadDLLs>uiautomationcore.dll;%(DelayLoadDLLs)</DelayLoadDLLs>
+      <DelayLoadDLLs>uiautomationcore.dll;icu.dll;%(DelayLoadDLLs)</DelayLoadDLLs>
       <!--
       ControlLib contains a DllMain that we need to force the use of.
       If you don't have this, then you'll see an error like

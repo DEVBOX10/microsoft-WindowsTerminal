@@ -24,6 +24,7 @@ namespace winrt::Microsoft::Terminal::Settings::Editor::implementation
 
         Automation::AutomationProperties::SetName(DeleteButton(), RS_(L"Profile_DeleteButton/Text"));
         AppearanceNavigator().Content(box_value(RS_(L"Profile_Appearance/Header")));
+        TerminalNavigator().Content(box_value(RS_(L"Profile_Terminal/Header")));
         AdvancedNavigator().Content(box_value(RS_(L"Profile_Advanced/Header")));
     }
 
@@ -52,9 +53,19 @@ namespace winrt::Microsoft::Terminal::Settings::Editor::implementation
             {
                 DeleteButton().Focus(FocusState::Programmatic);
                 _Profile.FocusDeleteButton(false);
-                ProfilesBase_ScrollView().ChangeView(nullptr, ProfilesBase_ScrollView().ScrollableHeight(), nullptr);
             }
         });
+
+        TraceLoggingWrite(
+            g_hTerminalSettingsEditorProvider,
+            "NavigatedToPage",
+            TraceLoggingDescription("Event emitted when the user navigates to a page in the settings UI"),
+            TraceLoggingValue("profile", "PageId", "The identifier of the page that was navigated to"),
+            TraceLoggingValue(_Profile.IsBaseLayer(), "IsProfileDefaults", "If the modified profile is the profile.defaults object"),
+            TraceLoggingValue(static_cast<GUID>(_Profile.Guid()), "ProfileGuid", "The guid of the profile that was navigated to. Set to {3ad42e7b-e073-5f3e-ac57-1c259ffa86a8} if the profiles.defaults object is being modified."),
+            TraceLoggingValue(_Profile.Source().c_str(), "ProfileSource", "The source of the profile that was navigated to"),
+            TraceLoggingKeyword(MICROSOFT_KEYWORD_MEASURES),
+            TelemetryPrivacyDataTag(PDT_ProductAndServiceUsage));
     }
 
     void Profiles_Base::OnNavigatedFrom(const NavigationEventArgs& /*e*/)
@@ -67,6 +78,11 @@ namespace winrt::Microsoft::Terminal::Settings::Editor::implementation
         _Profile.CurrentPage(ProfileSubPage::Appearance);
     }
 
+    void Profiles_Base::Terminal_Click(const IInspectable& /*sender*/, const RoutedEventArgs& /*args*/)
+    {
+        _Profile.CurrentPage(ProfileSubPage::Terminal);
+    }
+
     void Profiles_Base::Advanced_Click(const IInspectable& /*sender*/, const RoutedEventArgs& /*args*/)
     {
         _Profile.CurrentPage(ProfileSubPage::Advanced);
@@ -74,10 +90,21 @@ namespace winrt::Microsoft::Terminal::Settings::Editor::implementation
 
     void Profiles_Base::DeleteConfirmation_Click(const IInspectable& /*sender*/, const RoutedEventArgs& /*e*/)
     {
+        TraceLoggingWrite(
+            g_hTerminalSettingsEditorProvider,
+            "DeleteProfile",
+            TraceLoggingDescription("Event emitted when the user deletes a profile"),
+            TraceLoggingValue(to_hstring(_Profile.Guid()).c_str(), "ProfileGuid", "The guid of the profile that was navigated to"),
+            TraceLoggingValue(_Profile.Source().c_str(), "ProfileSource", "The source of the profile that was navigated to"),
+            TraceLoggingValue(false, "Orphaned", "Tracks if the profile is orphaned"),
+            TraceLoggingValue(_Profile.Hidden(), "Hidden", "Tracks if the profile is hidden"),
+            TraceLoggingKeyword(MICROSOFT_KEYWORD_MEASURES),
+            TelemetryPrivacyDataTag(PDT_ProductAndServiceUsage));
+
         winrt::get_self<ProfileViewModel>(_Profile)->DeleteProfile();
     }
 
-    fire_and_forget Profiles_Base::Commandline_Click(const IInspectable&, const RoutedEventArgs&)
+    safe_void_coroutine Profiles_Base::Commandline_Click(const IInspectable&, const RoutedEventArgs&)
     {
         auto lifetime = get_strong();
 
@@ -107,7 +134,7 @@ namespace winrt::Microsoft::Terminal::Settings::Editor::implementation
         }
     }
 
-    fire_and_forget Profiles_Base::Icon_Click(const IInspectable&, const RoutedEventArgs&)
+    safe_void_coroutine Profiles_Base::Icon_Click(const IInspectable&, const RoutedEventArgs&)
     {
         auto lifetime = get_strong();
 
@@ -115,11 +142,11 @@ namespace winrt::Microsoft::Terminal::Settings::Editor::implementation
         auto file = co_await OpenImagePicker(parentHwnd);
         if (!file.empty())
         {
-            _Profile.Icon(file);
+            _Profile.IconPath(file);
         }
     }
 
-    fire_and_forget Profiles_Base::StartingDirectory_Click(const IInspectable&, const RoutedEventArgs&)
+    safe_void_coroutine Profiles_Base::StartingDirectory_Click(const IInspectable&, const RoutedEventArgs&)
     {
         auto lifetime = get_strong();
         const auto parentHwnd{ reinterpret_cast<HWND>(_windowRoot.GetHostingWindow()) };
@@ -142,5 +169,10 @@ namespace winrt::Microsoft::Terminal::Settings::Editor::implementation
         {
             _Profile.StartingDirectory(folder);
         }
+    }
+
+    Windows::UI::Xaml::Controls::IconSource Profiles_Base::BuiltInIconConverter(const IInspectable& iconVal)
+    {
+        return Microsoft::Terminal::UI::IconPathConverter::IconSourceWUX(unbox_value<hstring>(iconVal));
     }
 }

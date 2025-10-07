@@ -4,6 +4,7 @@
 #include "pch.h"
 #include "CascadiaSettings.h"
 #include "CascadiaSettings.g.cpp"
+#include "MatchProfilesEntry.h"
 
 #include "DefaultTerminal.h"
 #include "FileUtils.h"
@@ -13,9 +14,8 @@
 #include <WtExeUtils.h>
 
 #include <shellapi.h>
-#include <shlwapi.h>
 #include <til/latch.h>
-#include <til/string.h>
+#include <til/env.h>
 
 using namespace winrt::Microsoft::Terminal;
 using namespace winrt::Microsoft::Terminal::Settings;
@@ -42,6 +42,16 @@ winrt::com_ptr<Profile> Model::implementation::CreateChild(const winrt::com_ptr<
     profile->Hidden(parent->Hidden());
     profile->AddLeastImportantParent(parent);
     return profile;
+}
+
+std::string_view Model::implementation::LoadStringResource(int resourceID)
+{
+    const HINSTANCE moduleInstanceHandle{ wil::GetModuleInstanceHandle() };
+    const auto resource = FindResourceW(moduleInstanceHandle, MAKEINTRESOURCEW(resourceID), RT_RCDATA);
+    const auto loaded = LoadResource(moduleInstanceHandle, resource);
+    const auto sz = SizeofResource(moduleInstanceHandle, resource);
+    const auto ptr = LockResource(loaded);
+    return { reinterpret_cast<const char*>(ptr), sz };
 }
 
 winrt::hstring CascadiaSettings::Hash() const noexcept
@@ -94,7 +104,7 @@ Model::CascadiaSettings CascadiaSettings::Copy() const
             for (const auto& profile : targetProfiles)
             {
                 allProfiles.emplace_back(*profile);
-                if (!profile->Hidden())
+                if (!profile->Hidden() && !profile->Orphaned())
                 {
                     activeProfiles.emplace_back(*profile);
                 }
@@ -104,6 +114,10 @@ Model::CascadiaSettings CascadiaSettings::Copy() const
         settings->_globals = _globals->Copy();
         settings->_allProfiles = winrt::single_threaded_observable_vector(std::move(allProfiles));
         settings->_activeProfiles = winrt::single_threaded_observable_vector(std::move(activeProfiles));
+
+        // extension packages don't need a deep clone
+        // because they're fully immutable. We can just copy the reference over instead.
+        settings->_extensionPackages = _extensionPackages;
     }
 
     // load errors
@@ -164,6 +178,16 @@ IObservableVector<Model::Profile> CascadiaSettings::ActiveProfiles() const noexc
     return _activeProfiles;
 }
 
+IVectorView<Model::ExtensionPackage> CascadiaSettings::Extensions()
+{
+    if (!_extensionPackages)
+    {
+        // Lazy load the ExtensionPackage objects
+        _extensionPackages = winrt::single_threaded_vector<Model::ExtensionPackage>(std::move(SettingsLoader::LoadExtensionPackages()));
+    }
+    return _extensionPackages.GetView();
+}
+
 // Method Description:
 // - Returns the globally configured keybindings
 // Arguments:
@@ -215,7 +239,7 @@ Model::Profile CascadiaSettings::CreateNewProfile()
     for (uint32_t candidateIndex = 0, count = _allProfiles.Size() + 1; candidateIndex < count; candidateIndex++)
     {
         // There is a theoretical unsigned integer wraparound, which is OK
-        newName = fmt::format(L"Profile {}", count + candidateIndex);
+        newName = fmt::format(FMT_COMPILE(L"Profile {}"), count + candidateIndex);
         if (std::none_of(begin(_allProfiles), end(_allProfiles), [&](auto&& profile) { return profile.Name() == newName; }))
         {
             break;
@@ -256,7 +280,7 @@ Model::Profile CascadiaSettings::DuplicateProfile(const Model::Profile& source)
 {
     THROW_HR_IF_NULL(E_INVALIDARG, source);
 
-    auto newName = fmt::format(L"{} ({})", source.Name(), RS_(L"CopySuffix"));
+    auto newName = fmt::format(FMT_COMPILE(L"{} ({})"), source.Name(), RS_(L"CopySuffix"));
 
     // Check if this name already exists and if so, append a number
     for (uint32_t candidateIndex = 0, count = _allProfiles.Size() + 1; candidateIndex < count; ++candidateIndex)
@@ -266,7 +290,7 @@ Model::Profile CascadiaSettings::DuplicateProfile(const Model::Profile& source)
             break;
         }
         // There is a theoretical unsigned integer wraparound, which is OK
-        newName = fmt::format(L"{} ({} {})", source.Name(), RS_(L"CopySuffix"), candidateIndex + 2);
+        newName = fmt::format(FMT_COMPILE(L"{} ({} {})"), source.Name(), RS_(L"CopySuffix"), candidateIndex + 2);
     }
 
     const auto duplicated = _createNewProfile(newName);
@@ -299,6 +323,7 @@ Model::Profile CascadiaSettings::DuplicateProfile(const Model::Profile& source)
     // These aren't in MTSM_PROFILE_SETTINGS because they're special
     DUPLICATE_SETTING_MACRO(TabColor);
     DUPLICATE_SETTING_MACRO(Padding);
+    DUPLICATE_SETTING_MACRO(Icon);
 
     {
         const auto font = source.FontInfo();
@@ -419,6 +444,7 @@ void CascadiaSettings::_validateSettings()
     _validateColorSchemesInCommands();
     _validateThemeExists();
     _validateProfileEnvironmentVariables();
+    _validateRegexes();
 }
 
 // Method Description:
@@ -462,84 +488,159 @@ void CascadiaSettings::_validateAllSchemesExist()
     }
 }
 
+extern bool TestHook_CascadiaSettings_ResolveSingleMediaResource(Model::OriginTag origin, std::wstring_view basePath, const Model::IMediaResource& resource);
+
+static void _resolveSingleMediaResourceInner(Model::OriginTag origin, std::wstring_view basePath, const Model::IMediaResource& resource)
+{
+    if (TestHook_CascadiaSettings_ResolveSingleMediaResource(origin, basePath, resource))
+    {
+        // See the implementation in TestHooks.cpp. Link-time Code Generation (LTCG) will delete this entire call
+        // and the test hook function itself.
+        return;
+    }
+
+    auto resourcePath{ resource.Path() };
+
+    if (til::equals_insensitive_ascii(resourcePath, L"desktopWallpaper"))
+    {
+        WCHAR desktopWallpaper[MAX_PATH];
+
+        // "The returned string will not exceed MAX_PATH characters" as of 2020
+        if (SystemParametersInfoW(SPI_GETDESKWALLPAPER, MAX_PATH, desktopWallpaper, SPIF_UPDATEINIFILE))
+        {
+            resource.Resolve(winrt::hstring{ &desktopWallpaper[0] });
+        }
+        else
+        {
+            resource.Reject();
+        }
+
+        return;
+    }
+    else if (til::equals_insensitive_ascii(resourcePath, L"none"))
+    {
+        // Resolve "none" to the OK Empty string.
+        resource.Resolve({});
+        return;
+    }
+    else if (resourcePath.empty())
+    {
+        // Do nothing.
+        return;
+    }
+
+    resourcePath = wil::ExpandEnvironmentStringsW<std::wstring>(resourcePath.data());
+    const auto colon{ std::wstring_view{ resourcePath }.find_first_of(L':') };
+
+    // URI (contains a :, but only after a reasonable distance for a schema)
+    if (colon != std::wstring_view::npos && colon >= 4)
+    {
+        try
+        {
+            const winrt::Windows::Foundation::Uri resourceUri{ resourcePath };
+            if (!resourceUri)
+            {
+                resource.Reject();
+                return;
+            }
+
+            const auto scheme{ resourceUri.SchemeName() };
+            if (til::starts_with_insensitive_ascii(scheme, L"http") ||
+                (til::equals_insensitive_ascii(scheme, L"ms-appx") && !resourceUri.Domain().empty()))
+            {
+                // http(s) URLs (WSL Distro AppX fragments) and ms-appx://APPLICATION/ (Julia) URLs decay to fragment-relative paths
+                const auto path{ resourceUri.Path() };
+                const std::wstring_view pathView{ path };
+                const std::wstring_view file{ pathView.substr(pathView.find_last_of(L'/') + 1) };
+
+                resourcePath = winrt::hstring{ file };
+                // FALL THROUGH TO TRY FILESYSTEM PATHS
+            }
+            else if (til::equals_insensitive_ascii(scheme, L"file"))
+            {
+                const auto uriPath{ resourceUri.Path() };
+                if (uriPath.size() < 2)
+                {
+                    resource.Reject();
+                    return;
+                }
+                // Uri mangles file paths to begin with a / (ala /C:/) and escapes special characters such as Space.
+                // Try to un-mangle it.
+                resourcePath = til::safe_slice_abs(winrt::Windows::Foundation::Uri::UnescapeComponent(uriPath), 1, SIZE_T_MAX);
+                // FALL THROUGH TO TRY FILESYSTEM PATHS
+            }
+            else if (!til::starts_with_insensitive_ascii(scheme, L"ms-"))
+            {
+                // Other non-file and non-ms* URLs are disallowed
+                resource.Reject();
+                return;
+            }
+            else
+            {
+                // Other URLs (so, file and ms-*) are permissible.
+                resource.Resolve(resourcePath);
+                return;
+            }
+        }
+        catch (...)
+        {
+            // fall through
+        }
+    }
+
+    // Not a URI? Try a path.
+    try
+    {
+        std::filesystem::path resourceAsFilesystemPath{ std::wstring_view{ resourcePath } };
+        if (!basePath.empty())
+        {
+            resourceAsFilesystemPath = std::filesystem::path{ basePath } / resourceAsFilesystemPath;
+        }
+
+        if (!std::filesystem::exists(resourceAsFilesystemPath))
+        {
+            resource.Reject();
+            return;
+        }
+
+        resource.Resolve(winrt::hstring{ resourceAsFilesystemPath.lexically_normal().native() });
+        return;
+    }
+    catch (...)
+    {
+        // fall through
+    }
+
+    resource.Reject();
+}
+
+void CascadiaSettings::_resolveSingleMediaResource(OriginTag origin, std::wstring_view basePath, const Model::IMediaResource& resource)
+{
+    _resolveSingleMediaResourceInner(origin, basePath, resource);
+    if (!resource.Ok() && (origin == OriginTag::User || origin == OriginTag::ProfilesDefaults))
+    {
+        _foundInvalidUserResources = true;
+    }
+}
+
 // Method Description:
-// - Ensures that all specified images resources (icons and background images) are valid URIs.
-//   This does not verify that the icon or background image files are encoded as an image.
-// Arguments:
-// - <none>
-// Return Value:
-// - <none>
-// - Appends a SettingsLoadWarnings::InvalidBackgroundImage to our list of warnings if
-//   we find any invalid background images.
-// - Appends a SettingsLoadWarnings::InvalidIconImage to our list of warnings if
-//   we find any invalid icon images.
+// - Ensures that all specified images resources (icons and background images) are valid.
 void CascadiaSettings::_validateMediaResources()
 {
-    auto invalidBackground{ false };
-    auto invalidIcon{ false };
+    _foundInvalidUserResources = false;
 
-    for (auto profile : _allProfiles)
+    const MediaResourceResolver mediaResourceResolver{ this, &CascadiaSettings::_resolveSingleMediaResource };
+
+    for (const auto& profile : _allProfiles)
     {
-        if (const auto path = profile.DefaultAppearance().ExpandedBackgroundImagePath(); !path.empty())
-        {
-            // Attempt to convert the path to a URI, the ctor will throw if it's invalid/unparseable.
-            // This covers file paths on the machine, app data, URLs, and other resource paths.
-            try
-            {
-                winrt::Windows::Foundation::Uri imagePath{ path };
-            }
-            catch (...)
-            {
-                // reset background image path
-                profile.DefaultAppearance().ClearBackgroundImagePath();
-                invalidBackground = true;
-            }
-        }
-
-        if (profile.UnfocusedAppearance())
-        {
-            if (const auto path = profile.UnfocusedAppearance().ExpandedBackgroundImagePath(); !path.empty())
-            {
-                // Attempt to convert the path to a URI, the ctor will throw if it's invalid/unparseable.
-                // This covers file paths on the machine, app data, URLs, and other resource paths.
-                try
-                {
-                    winrt::Windows::Foundation::Uri imagePath{ path };
-                }
-                catch (...)
-                {
-                    // reset background image path
-                    profile.UnfocusedAppearance().ClearBackgroundImagePath();
-                    invalidBackground = true;
-                }
-            }
-        }
-
-        // Anything longer than 2 wchar_t's _isn't_ an emoji or symbol,
-        // so treat it as an invalid path.
-        if (const auto icon = profile.Icon(); icon.size() > 2)
-        {
-            const auto iconPath{ wil::ExpandEnvironmentStringsW<std::wstring>(icon.c_str()) };
-            try
-            {
-                winrt::Windows::Foundation::Uri imagePath{ iconPath };
-            }
-            catch (...)
-            {
-                profile.ClearIcon();
-                invalidIcon = true;
-            }
-        }
+        profile.as<IMediaResourceContainer>()->ResolveMediaResources(mediaResourceResolver);
     }
 
-    if (invalidBackground)
-    {
-        _warnings.Append(SettingsLoadWarnings::InvalidBackgroundImage);
-    }
+    _globals->ResolveMediaResources(mediaResourceResolver);
 
-    if (invalidIcon)
+    if (_foundInvalidUserResources)
     {
-        _warnings.Append(SettingsLoadWarnings::InvalidIcon);
+        _warnings.Append(SettingsLoadWarnings::InvalidMediaResource);
     }
 }
 
@@ -550,7 +651,7 @@ void CascadiaSettings::_validateProfileEnvironmentVariables()
 {
     for (const auto& profile : _allProfiles)
     {
-        std::set<std::wstring, til::wstring_case_insensitive_compare> envVarNames{};
+        std::set<std::wstring, til::env_key_sorter> envVarNames{};
         if (profile.EnvironmentVariables() == nullptr)
         {
             continue;
@@ -564,6 +665,41 @@ void CascadiaSettings::_validateProfileEnvironmentVariables()
                 return;
             }
         }
+    }
+}
+
+// Returns true if all regexes in the new tab menu are valid, false otherwise
+static bool _validateNTMEntries(const IVector<Model::NewTabMenuEntry>& entries)
+{
+    if (!entries)
+    {
+        return true;
+    }
+    for (const auto& ntmEntry : entries)
+    {
+        if (const auto& folderEntry = ntmEntry.try_as<Model::FolderEntry>())
+        {
+            if (!_validateNTMEntries(folderEntry.RawEntries()))
+            {
+                return false;
+            }
+        }
+        if (const auto& matchProfilesEntry = ntmEntry.try_as<Model::MatchProfilesEntry>())
+        {
+            if (!winrt::get_self<Model::implementation::MatchProfilesEntry>(matchProfilesEntry)->ValidateRegexes())
+            {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+void CascadiaSettings::_validateRegexes()
+{
+    if (!_validateNTMEntries(_globals->NewTabMenu()))
+    {
+        _warnings.Append(SettingsLoadWarnings::InvalidRegex);
     }
 }
 
@@ -662,7 +798,7 @@ Model::Profile CascadiaSettings::_getProfileForCommandLine(const winrt::hstring&
 
             try
             {
-                _commandLinesCache.emplace_back(NormalizeCommandLine(cmd.c_str()), profile);
+                _commandLinesCache.emplace_back(Profile::NormalizeCommandLine(cmd.c_str()), profile);
             }
             CATCH_LOG()
         }
@@ -681,7 +817,7 @@ Model::Profile CascadiaSettings::_getProfileForCommandLine(const winrt::hstring&
 
     try
     {
-        const auto needle = NormalizeCommandLine(commandLine.c_str());
+        const auto needle = Profile::NormalizeCommandLine(commandLine.c_str());
 
         // til::starts_with(string, prefix) will always return false if prefix.size() > string.size().
         // --> Using binary search we can safely skip all items in _commandLinesCache where .first.size() > needle.size().
@@ -708,129 +844,6 @@ Model::Profile CascadiaSettings::_getProfileForCommandLine(const winrt::hstring&
     }
 
     return nullptr;
-}
-
-// Given a commandLine like the following:
-// * "C:\WINDOWS\System32\cmd.exe"
-// * "pwsh -WorkingDirectory ~"
-// * "C:\Program Files\PowerShell\7\pwsh.exe"
-// * "C:\Program Files\PowerShell\7\pwsh.exe -WorkingDirectory ~"
-//
-// This function returns:
-// * "C:\Windows\System32\cmd.exe"
-// * "C:\Program Files\PowerShell\7\pwsh.exe\0-WorkingDirectory\0~"
-// * "C:\Program Files\PowerShell\7\pwsh.exe"
-// * "C:\Program Files\PowerShell\7\pwsh.exe\0-WorkingDirectory\0~"
-//
-// The resulting strings are then used for comparisons in _getProfileForCommandLine().
-// For instance a resulting string of
-//   "C:\Program Files\PowerShell\7\pwsh.exe"
-// is considered a compatible profile with
-//   "C:\Program Files\PowerShell\7\pwsh.exe -WorkingDirectory ~"
-// as it shares the same (normalized) prefix.
-std::wstring CascadiaSettings::NormalizeCommandLine(LPCWSTR commandLine)
-{
-    // Turn "%SystemRoot%\System32\cmd.exe" into "C:\WINDOWS\System32\cmd.exe".
-    // We do this early, as environment variables might occur anywhere in the commandLine.
-    std::wstring normalized;
-    THROW_IF_FAILED(wil::ExpandEnvironmentStringsW(commandLine, normalized));
-
-    // One of the most important things this function does is to strip quotes.
-    // That way the commandLine "foo.exe -bar" and "\"foo.exe\" \"-bar\"" appear identical.
-    // We'll abuse CommandLineToArgvW for that as it's close to what CreateProcessW uses.
-    auto argc = 0;
-    wil::unique_hlocal_ptr<PWSTR[]> argv{ CommandLineToArgvW(normalized.c_str(), &argc) };
-    THROW_LAST_ERROR_IF(!argc);
-
-    // The index of the first argument in argv for our executable in argv[0].
-    // Given {"C:\Program Files\PowerShell\7\pwsh.exe", "-WorkingDirectory", "~"} this will be 1.
-    auto startOfArguments = 1;
-
-    // The given commandLine should start with an executable name or path.
-    // For instance given the following argv arrays:
-    // * {"C:\WINDOWS\System32\cmd.exe"}
-    // * {"pwsh", "-WorkingDirectory", "~"}
-    // * {"C:\Program", "Files\PowerShell\7\pwsh.exe"}
-    //               ^^^^
-    //   Notice how there used to be a space in the path, which was split by ExpandEnvironmentStringsW().
-    //   CreateProcessW() supports such atrocities, so we got to do the same.
-    // * {"C:\Program Files\PowerShell\7\pwsh.exe", "-WorkingDirectory", "~"}
-    //
-    // This loop tries to resolve relative paths, as well as executable names in %PATH%
-    // into absolute paths and normalizes them. The results for the above would be:
-    // * "C:\Windows\System32\cmd.exe"
-    // * "C:\Program Files\PowerShell\7\pwsh.exe"
-    // * "C:\Program Files\PowerShell\7\pwsh.exe"
-    // * "C:\Program Files\PowerShell\7\pwsh.exe"
-    for (;;)
-    {
-        // CreateProcessW uses RtlGetExePath to get the lpPath for SearchPathW.
-        // The difference between the behavior of SearchPathW if lpPath is nullptr and what RtlGetExePath returns
-        // seems to be mostly whether SafeProcessSearchMode is respected and the support for relative paths.
-        // Windows Terminal makes the use of relative paths rather impractical which is why we simply dropped the call to RtlGetExePath.
-        const auto status = wil::SearchPathW(nullptr, argv[0], L".exe", normalized);
-
-        if (status == S_OK)
-        {
-            const auto attributes = GetFileAttributesW(normalized.c_str());
-
-            if (attributes != INVALID_FILE_ATTRIBUTES && WI_IsFlagClear(attributes, FILE_ATTRIBUTE_DIRECTORY))
-            {
-                std::filesystem::path path{ std::move(normalized) };
-
-                // canonical() will resolve symlinks, etc. for us.
-                {
-                    std::error_code ec;
-                    auto canonicalPath = std::filesystem::canonical(path, ec);
-                    if (!ec)
-                    {
-                        path = std::move(canonicalPath);
-                    }
-                }
-
-                // std::filesystem::path has no way to extract the internal path.
-                // So about that.... I own you, computer. Give me that path.
-                normalized = std::move(const_cast<std::wstring&>(path.native()));
-                break;
-            }
-        }
-        // All other error types aren't handled at the moment.
-        else if (status != HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND))
-        {
-            break;
-        }
-        // If the file path couldn't be found by SearchPathW this could be the result of us being given a commandLine
-        // like "C:\foo bar\baz.exe -arg" which is resolved to the argv array {"C:\foo", "bar\baz.exe", "-arg"},
-        // or we were erroneously given a directory to execute (e.g. someone ran `wt .`).
-        // Just like CreateProcessW() we thus try to concatenate arguments until we successfully resolve a valid path.
-        // Of course we can only do that if we have at least 2 remaining arguments in argv.
-        if ((argc - startOfArguments) < 2)
-        {
-            break;
-        }
-
-        // As described in the comment right above, we concatenate arguments in an attempt to resolve a valid path.
-        // The code below turns argv from {"C:\foo", "bar\baz.exe", "-arg"} into {"C:\foo bar\baz.exe", "-arg"}.
-        // The code abuses the fact that CommandLineToArgvW allocates all arguments back-to-back on the heap separated by '\0'.
-        argv[startOfArguments][-1] = L' ';
-        ++startOfArguments;
-    }
-
-    // We've (hopefully) finished resolving the path to the executable.
-    // We're now going to append all remaining arguments to the resulting string.
-    // If argv is {"C:\Program Files\PowerShell\7\pwsh.exe", "-WorkingDirectory", "~"},
-    // then we'll get "C:\Program Files\PowerShell\7\pwsh.exe\0-WorkingDirectory\0~"
-    if (startOfArguments < argc)
-    {
-        // normalized contains a canonical form of argv[0] at this point.
-        // -1 allows us to include the \0 between argv[0] and argv[1] in the call to append().
-        const auto beg = argv[startOfArguments] - 1;
-        const auto lastArg = argv[argc - 1];
-        const auto end = lastArg + wcslen(lastArg);
-        normalized.append(beg, end);
-    }
-
-    return normalized;
 }
 
 // Method Description:
@@ -1183,7 +1196,7 @@ void CascadiaSettings::_refreshDefaultTerminals()
     std::pair<std::vector<Model::DefaultTerminal>, Model::DefaultTerminal> result{ {}, nullptr };
     til::latch latch{ 1 };
 
-    std::ignore = [&]() -> winrt::fire_and_forget {
+    std::ignore = [&]() -> safe_void_coroutine {
         const auto cleanup = wil::scope_exit([&]() {
             latch.count_down();
         });
@@ -1194,15 +1207,6 @@ void CascadiaSettings::_refreshDefaultTerminals()
     latch.wait();
     _defaultTerminals = winrt::single_threaded_observable_vector(std::move(result.first));
     _currentDefaultTerminal = std::move(result.second);
-}
-
-void CascadiaSettings::ExportFile(winrt::hstring path, winrt::hstring content)
-{
-    try
-    {
-        WriteUTF8FileAtomic({ path.c_str() }, til::u16u8(content));
-    }
-    CATCH_LOG();
 }
 
 void CascadiaSettings::_validateThemeExists()
@@ -1253,4 +1257,9 @@ void CascadiaSettings::_validateThemeExists()
 void CascadiaSettings::ExpandCommands()
 {
     _globals->ExpandCommands(ActiveProfiles().GetView(), GlobalSettings().ColorSchemes());
+}
+
+void CascadiaSettings::UpdateCommandID(const Model::Command& cmd, winrt::hstring newID)
+{
+    _globals->UpdateCommandID(cmd, newID);
 }

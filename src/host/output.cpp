@@ -5,10 +5,6 @@
 
 #include "_output.h"
 #include "output.h"
-#include "handle.h"
-
-#include "getset.h"
-#include "misc.h"
 
 #include "../interactivity/inc/ServiceLocator.hpp"
 #include "../types/inc/Viewport.hpp"
@@ -35,6 +31,8 @@ using namespace Microsoft::Console::Interactivity;
     // codepage by console.cpl or shell32. The default codepage is OEMCP.
     gci.CP = gci.GetCodePage();
     gci.OutputCP = gci.GetCodePage();
+    gci.DefaultCP = gci.GetCodePage();
+    gci.DefaultOutputCP = gci.GetCodePage();
 
     gci.Flags |= CONSOLE_USE_PRIVATE_FLAGS;
 
@@ -113,6 +111,9 @@ static void _CopyRectangle(SCREEN_INFORMATION& screenInfo,
             next = OutputCell(*screenInfo.GetCellDataAt(sourcePos));
             screenInfo.GetTextBuffer().WriteLine(OutputCellIterator({ &current, 1 }), targetPos);
         } while (target.WalkInBounds(targetPos, walkDirection));
+
+        auto& textBuffer = screenInfo.GetTextBuffer();
+        ImageSlice::CopyBlock(textBuffer, source.ToExclusive(), textBuffer, target.ToExclusive());
     }
 }
 
@@ -222,7 +223,12 @@ std::wstring ReadOutputStringW(const SCREEN_INFORMATION& screenInfo,
             // Otherwise, add anything that isn't a trailing cell. (Trailings are duplicate copies of the leading.)
             if (it->DbcsAttr() != DbcsAttribute::Trailing)
             {
-                retVal += it->Chars();
+                auto chars = it->Chars();
+                if (chars.size() > 1)
+                {
+                    chars = { &UNICODE_REPLACEMENT, 1 };
+                }
+                retVal += chars;
             }
         }
 
@@ -273,17 +279,8 @@ void ScreenBufferSizeChange(const til::size coordNewSize)
 // - source - The viewport describing the region where data was copied from
 // - fill - The viewport describing the area that was filled in with the fill character (uncovered area)
 // - target - The viewport describing the region where data was copied to
-static void _ScrollScreen(SCREEN_INFORMATION& screenInfo, const Viewport& source, const Viewport& fill, const Viewport& target)
+static void _ScrollScreen(SCREEN_INFORMATION& screenInfo, const Viewport& fill, const Viewport& target)
 {
-    if (screenInfo.IsActiveScreenBuffer())
-    {
-        auto pNotifier = ServiceLocator::LocateAccessibilityNotifier();
-        if (pNotifier != nullptr)
-        {
-            pNotifier->NotifyConsoleUpdateScrollEvent(target.Origin().x - source.Left(), target.Origin().y - source.RightInclusive());
-        }
-    }
-
     // Get the text buffer and send it commands.
     // It will figure out whether or not we're active and where the messages need to go.
     auto& textBuffer = screenInfo.GetTextBuffer();
@@ -403,7 +400,7 @@ void ScrollRegion(SCREEN_INFORMATION& screenInfo,
         _CopyRectangle(screenInfo, source, target.Origin());
 
         // Notify the renderer and accessibility as to what moved and where.
-        _ScrollScreen(screenInfo, source, fill, target);
+        _ScrollScreen(screenInfo, fill, target);
     }
 
     // ------ 6. FILL ------
@@ -420,6 +417,9 @@ void ScrollRegion(SCREEN_INFORMATION& screenInfo,
     {
         const auto& view = remaining.at(i);
         screenInfo.WriteRect(fillData, view);
+
+        // If the region has image content it needs to be erased.
+        ImageSlice::EraseBlock(screenInfo.GetTextBuffer(), view.ToExclusive());
 
         // If we're scrolling an area that encompasses the full buffer width,
         // then the filled rows should also have their line rendition reset.
@@ -458,8 +458,6 @@ void SetActiveScreenBuffer(SCREEN_INFORMATION& screenInfo)
 
     // Set window size.
     screenInfo.PostUpdateWindowSize();
-
-    gci.ConsoleIme.RefreshAreaAttributes();
 
     // Write data to screen.
     WriteToScreen(screenInfo, screenInfo.GetViewport());

@@ -9,7 +9,6 @@
   <Import Project="..\common.openconsole.props" Condition="'$(OpenConsoleDir)'==''" />
 
   <PropertyGroup Label="Globals">
-    <CppWinRTHeapEnforcement>AnyValueHereWillDisableTheOptOut</CppWinRTHeapEnforcement>
     <CppWinRTEnabled>true</CppWinRTEnabled>
     <CppWinRTOptimized>true</CppWinRTOptimized>
     <DefaultLanguage>en-US</DefaultLanguage>
@@ -78,7 +77,8 @@
     </ClCompile>
     <Link>
       <SubSystem Condition="'%(SubSystem)'==''">Console</SubSystem>
-      <GenerateWindowsMetadata>true</GenerateWindowsMetadata>
+      <GenerateWindowsMetadata>$(CppWinRTGenerateWindowsMetadata)</GenerateWindowsMetadata>
+      <GenerateWindowsMetadata Condition="'%(GenerateWindowsMetadata)'==''">true</GenerateWindowsMetadata>
     </Link>
   </ItemDefinitionGroup>
 

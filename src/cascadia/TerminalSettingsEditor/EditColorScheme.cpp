@@ -42,16 +42,17 @@ namespace winrt::Microsoft::Terminal::Settings::Editor::implementation
     {
         _ViewModel = e.Parameter().as<Editor::ColorSchemeViewModel>();
 
-        // Set the text disclaimer for the text box
-        hstring disclaimer{};
-        if (_ViewModel.IsInBoxScheme())
-        {
-            // load disclaimer for in-box profiles
-            disclaimer = RS_(L"ColorScheme_DeleteButtonDisclaimerInBox/Text");
-        }
-        RenameContainer().HelpText(disclaimer);
+        const auto schemeName = _ViewModel.Name();
+        NameBox().Text(schemeName);
 
-        NameBox().Text(_ViewModel.Name());
+        TraceLoggingWrite(
+            g_hTerminalSettingsEditorProvider,
+            "NavigatedToPage",
+            TraceLoggingDescription("Event emitted when the user navigates to a page in the settings UI"),
+            TraceLoggingValue("colorSchemes.editColorScheme", "PageId", "The identifier of the page that was navigated to"),
+            TraceLoggingValue(schemeName.data(), "SchemeName", "The name of the color scheme that's being edited"),
+            TraceLoggingKeyword(MICROSOFT_KEYWORD_MEASURES),
+            TelemetryPrivacyDataTag(PDT_ProductAndServiceUsage));
     }
 
     void EditColorScheme::ColorPickerChanged(const IInspectable& sender,

@@ -1,6 +1,44 @@
 ![terminal-logos](https://github.com/microsoft/terminal/assets/91625426/333ddc76-8ab2-4eb4-a8c0-4d7b953b1179)
 
+[![Terminal Build Status](https://dev.azure.com/shine-oss/terminal/_apis/build/status%2FTerminal%20CI?branchName=main)](https://dev.azure.com/shine-oss/terminal/_build/latest?definitionId=1&branchName=main)
+
 # Welcome to the Windows Terminal, Console and Command-Line repo
+
+<details>
+  <summary><strong>Table of Contents</strong></summary>
+
+- [Installing and running Windows Terminal](#installing-and-running-windows-terminal)
+  - [Microsoft Store \[Recommended\]](#microsoft-store-recommended)
+  - [Other install methods](#other-install-methods)
+    - [Via GitHub](#via-github)
+    - [Via Windows Package Manager CLI (aka winget)](#via-windows-package-manager-cli-aka-winget)
+    - [Via Chocolatey (unofficial)](#via-chocolatey-unofficial)
+    - [Via Scoop (unofficial)](#via-scoop-unofficial)
+- [Installing Windows Terminal Canary](#installing-windows-terminal-canary)
+- [Windows Terminal Roadmap](#windows-terminal-roadmap)
+- [Terminal \& Console Overview](#terminal--console-overview)
+  - [Windows Terminal](#windows-terminal)
+  - [The Windows Console Host](#the-windows-console-host)
+  - [Shared Components](#shared-components)
+  - [Creating the new Windows Terminal](#creating-the-new-windows-terminal)
+- [Resources](#resources)
+- [FAQ](#faq)
+  - [I built and ran the new Terminal, but it looks just like the old console](#i-built-and-ran-the-new-terminal-but-it-looks-just-like-the-old-console)
+- [Documentation](#documentation)
+- [Contributing](#contributing)
+- [Communicating with the Team](#communicating-with-the-team)
+- [Developer Guidance](#developer-guidance)
+- [Prerequisites](#prerequisites)
+- [Building the Code](#building-the-code)
+  - [Building in PowerShell](#building-in-powershell)
+  - [Building in Cmd](#building-in-cmd)
+- [Running \& Debugging](#running--debugging)
+  - [Coding Guidance](#coding-guidance)
+- [Code of Conduct](#code-of-conduct)
+
+</details>
+
+<br />
 
 This repository contains the source code for:
 
@@ -8,8 +46,8 @@ This repository contains the source code for:
 * [Windows Terminal Preview](https://aka.ms/terminal-preview)
 * The Windows console host (`conhost.exe`)
 * Components shared between the two projects
-* [ColorTool](https://github.com/microsoft/terminal/tree/main/src/tools/ColorTool)
-* [Sample projects](https://github.com/microsoft/terminal/tree/main/samples)
+* [ColorTool](./src/tools/ColorTool)
+* [Sample projects](./samples)
   that show how to consume the Windows Console APIs
 
 Related repositories include:
@@ -21,7 +59,7 @@ Related repositories include:
 
 ## Installing and running Windows Terminal
 
-> **Note**\
+> [!NOTE]
 > Windows Terminal requires Windows 10 2004 (build 19041) or later
 
 ### Microsoft Store [Recommended]
@@ -53,7 +91,7 @@ fails for any reason, you can try the following command at a PowerShell prompt:
 Add-AppxPackage Microsoft.WindowsTerminal_<versionNumber>.msixbundle
 ```
 
-> **Note**\
+> [!NOTE]
 > If you install Terminal manually:
 >
 > * You may need to install the [VC++ v14 Desktop Framework Package](https://docs.microsoft.com/troubleshoot/cpp/c-runtime-packages-desktop-bridge#how-to-install-and-update-desktop-framework-packages).
@@ -72,7 +110,7 @@ package:
 winget install --id Microsoft.WindowsTerminal -e
 ```
 
-> **Note**\
+> [!NOTE]
 > Dependency support is available in WinGet version [1.6.2631 or later](https://github.com/microsoft/winget-cli/releases). To install the Terminal stable release 1.18 or later, please make sure you have the updated version of the WinGet client.
 
 #### Via Chocolatey (unofficial)
@@ -144,15 +182,6 @@ _Learn more about the [types of Windows Terminal distributions](https://learn.mi
 
 The plan for the Windows Terminal [is described here](/doc/roadmap-2023.md) and
 will be updated as the project proceeds.
-
-## Project Build Status
-
-Project|Build Status
----|---
-Terminal|[![Terminal Build Status](https://dev.azure.com/ms/terminal/_apis/build/status/terminal%20CI?branchName=main)](https://dev.azure.com/ms/terminal/_build?definitionId=136)
-ColorTool|![Colortool Build Status](https://microsoft.visualstudio.com/_apis/public/build/definitions/c93e867a-8815-43c1-92c4-e7dd5404f1e1/17023/badge)
-
----
 
 ## Terminal & Console Overview
 
@@ -262,7 +291,7 @@ Cause: You're launching the incorrect solution in Visual Studio.
 Solution: Make sure you're building & deploying the `CascadiaPackage` project in
 Visual Studio.
 
-> **Note**\
+> [!NOTE]
 > `OpenConsole.exe` is just a locally-built `conhost.exe`, the classic
 > Windows Console that hosts Windows' command-line infrastructure. OpenConsole
 > is used by Windows Terminal to connect to and communicate with command-line
@@ -286,7 +315,7 @@ enhance Windows Terminal\!
 
 ***BEFORE you start work on a feature/fix***, please read & follow our
 [Contributor's
-Guide](https://github.com/microsoft/terminal/blob/main/CONTRIBUTING.md) to
+Guide](./CONTRIBUTING.md) to
 help avoid any wasted or duplicate effort.
 
 ## Communicating with the Team
@@ -311,6 +340,19 @@ If you would like to ask a question that you feel doesn't warrant an issue
 
 ## Prerequisites
 
+You can configure your environment to build Terminal in one of two ways:
+
+### Using WinGet configuration file
+
+After cloning the repository, you can use a [WinGet configuration file](https://learn.microsoft.com/en-us/windows/package-manager/configuration/#use-a-winget-configuration-file-to-configure-your-machine)
+to set up your environment. The [default configuration file](.config/configuration.winget) installs Visual Studio 2022 Community & rest of the required tools. There are two other variants of the configuration file available in the [.config](.config) directory for Enterprise & Professional editions of Visual Studio 2022. To run the default configuration file, you can either double-click the file from explorer or run the following command:
+
+```powershell
+winget configure .config\configuration.winget
+```
+
+### Manual configuration
+
 * You must be running Windows 10 2004 (build >= 10.0.19041.0) or later to run
   Windows Terminal
 * You must [enable Developer Mode in the Windows Settings
@@ -333,16 +375,7 @@ If you would like to ask a question that you feel doesn't warrant an issue
 
 ## Building the Code
 
-This repository uses [git
-submodules](https://git-scm.com/book/en/v2/Git-Tools-Submodules) for some of its
-dependencies. To make sure submodules are restored or updated, be sure to run
-the following prior to building:
-
-```shell
-git submodule update --init --recursive
-```
-
-OpenConsole.sln may be built from within Visual Studio or from the command-line
+OpenConsole.slnx may be built from within Visual Studio or from the command-line
 using a set of convenience scripts & tools in the **/tools** directory:
 
 ### Building in PowerShell
@@ -387,10 +420,10 @@ Please review these brief docs below about our coding practices.
 This is a work in progress as we learn what we'll need to provide people in
 order to be effective contributors to our project.
 
-* [Coding Style](https://github.com/microsoft/terminal/blob/main/doc/STYLE.md)
-* [Code Organization](https://github.com/microsoft/terminal/blob/main/doc/ORGANIZATION.md)
-* [Exceptions in our legacy codebase](https://github.com/microsoft/terminal/blob/main/doc/EXCEPTIONS.md)
-* [Helpful smart pointers and macros for interfacing with Windows in WIL](https://github.com/microsoft/terminal/blob/main/doc/WIL.md)
+* [Coding Style](./doc/STYLE.md)
+* [Code Organization](./doc/ORGANIZATION.md)
+* [Exceptions in our legacy codebase](./doc/EXCEPTIONS.md)
+* [Helpful smart pointers and macros for interfacing with Windows in WIL](./doc/WIL.md)
 
 ---
 

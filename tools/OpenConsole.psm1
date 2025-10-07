@@ -1,3 +1,4 @@
+#Requires -Version 7
 
 # The project's root directory.
 $script:OpenConsoleFallbackRoot="$PSScriptRoot\.."
@@ -82,6 +83,7 @@ function Set-MsbuildDevEnvironment
     switch ($env:PROCESSOR_ARCHITECTURE) {
         "amd64" { $arch = "x64" }
         "x86" { $arch = "x86" }
+        "arm64" { $arch = "arm64" }
         default { throw "Unknown architecture: $switch" }
     }
 
@@ -169,7 +171,7 @@ function Invoke-OpenConsoleTests()
         [switch]$FTOnly,
 
         [parameter(Mandatory=$false)]
-        [ValidateSet('host', 'interactivityWin32', 'terminal', 'adapter', 'feature', 'uia', 'textbuffer', 'til', 'types', 'terminalCore', 'terminalApp', 'localTerminalApp', 'localSettingsModel', 'unitRemoting', 'unitControl')]
+        [ValidateSet('host', 'interactivityWin32', 'terminal', 'adapter', 'feature', 'uia', 'textbuffer', 'til', 'types', 'terminalCore', 'terminalApp', 'localTerminalApp', 'unitSettingsModel', 'unitControl', 'winconpty')]
         [string]$Test,
 
         [parameter(Mandatory=$false)]
@@ -197,8 +199,8 @@ function Invoke-OpenConsoleTests()
     {
         $OpenConsolePlatform = 'Win32'
     }
-    $OpenConsolePath = "$env:OpenConsoleroot\bin\$OpenConsolePlatform\$Configuration\OpenConsole.exe"
-    $TaefExePath = "$root\packages\Microsoft.Taef.10.60.210621002\build\Binaries\$Platform\te.exe"
+    $OpenConsolePath = "$root\bin\$OpenConsolePlatform\$Configuration\OpenConsole.exe"
+    $TaefExePath = "$root\packages\Microsoft.Taef.10.93.240607003\build\Binaries\$Platform\te.exe"
     $BinDir = "$root\bin\$OpenConsolePlatform\$Configuration"
 
     [xml]$TestConfig = Get-Content "$root\tools\tests.xml"
@@ -232,13 +234,19 @@ function Invoke-OpenConsoleTests()
     # run selected tests
     foreach ($t in $TestsToRun)
     {
+        $currentTaefExe = $TaefExePath
+        if ($t.isolatedTaef -eq "true")
+        {
+            $currentTaefExe = (Join-Path (Split-Path (Join-Path $BinDir $t.binary)) "te.exe")
+        }
+
         if ($t.type -eq "unit")
         {
-            & $TaefExePath "$BinDir\$($t.binary)" $TaefArgs
+            & $currentTaefExe "$BinDir\$($t.binary)" $TaefArgs
         }
         elseif ($t.type -eq "ft")
         {
-            Invoke-TaefInNewWindow -OpenConsolePath $OpenConsolePath -TaefPath $TaefExePath -TestDll "$BinDir\$($t.binary)" -TaefArgs $TaefArgs
+            Invoke-TaefInNewWindow -OpenConsolePath $OpenConsolePath -TaefPath $currentTaefExe -TestDll "$BinDir\$($t.binary)" -TaefArgs $TaefArgs
         }
         else
         {
@@ -256,13 +264,13 @@ function Invoke-OpenConsoleTests()
 
 
 #.SYNOPSIS
-# Builds OpenConsole.sln using msbuild. Any arguments get passed on to msbuild.
+# Builds OpenConsole.slnx using msbuild. Any arguments get passed on to msbuild.
 function Invoke-OpenConsoleBuild()
 {
     $root = Find-OpenConsoleRoot
-    & "$root\dep\nuget\nuget.exe" restore "$root\OpenConsole.sln"
+    & "$root\dep\nuget\nuget.exe" restore "$root\OpenConsole.slnx"
     & "$root\dep\nuget\nuget.exe" restore "$root\dep\nuget\packages.config"
-    msbuild.exe "$root\OpenConsole.sln" @args
+    msbuild.exe "$root\OpenConsole.slnx" @args
 }
 
 #.SYNOPSIS
